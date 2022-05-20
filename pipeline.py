@@ -1,9 +1,10 @@
-from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
+from sklearn.ensemble import RandomForestRegressor
 import pandas as pd
 
 from myfm import MyFMRegressor
+from myfm import MyFMOrderedProbit
 from myfm.utils.callbacks import RegressionCallback
 
 class MyRegressionCallback(RegressionCallback):
@@ -18,17 +19,27 @@ class MyRegressionCallback(RegressionCallback):
          return (True, description)
       return (should_stop, description)
 
-dataset = load_breast_cancer()
-X = pd.read_csv('x_data', sep=',', encoding='latin-1', nrows=100, header=None)
-y = pd.read_csv('y_data', sep=',', encoding='latin-1', nrows=100, header=None)
-group_shapes = pd.read_csv('group_shapes', sep=',', encoding='latin-1', header=None)
+if __name__ == "__main__":
+   X = pd.read_csv('x_data', sep=',', encoding='latin-1', nrows=100, header=None, index_col=None)
+   y = pd.read_csv('y_data', sep=',', encoding='latin-1', nrows=100, header=None, index_col=None)
 
-X_train, X_test, y_train, y_test = train_test_split(
-   X, y, random_state=42
-)
+   group_shapes = pd.read_csv('group_shapes', sep=',', encoding='latin-1', header=None)
 
-callback = MyRegressionCallback(5, X_test, y_test.values)
+   X_train, X_test, y_train, y_test = train_test_split(
+      X, y, random_state=42
+   )
 
-fm = MyFMRegressor(rank=2).fit(X_train, y_train, n_iter=10000, group_shapes=group_shapes.values[0], callback=callback)
-error = metrics.mean_squared_error(y_test, fm.predict(X_test), squared=False)
-print(error)
+   callback = MyRegressionCallback(5, X_test, y_test.values)
+
+   reg = MyFMRegressor(rank=1).fit(X_train, y_train, n_iter=400, group_shapes=group_shapes.T.to_numpy()[0], callback=callback)
+   ord = MyFMOrderedProbit(rank=0).fit(X_train, y_train, n_iter=400, group_shapes=group_shapes.T.to_numpy()[0])
+   rf = RandomForestRegressor(n_estimators = 400, random_state = 42).fit(X_train, y_train)
+
+   reg_error = metrics.mean_squared_error(y_test, reg.predict(X_test), squared=False)
+   print(f'FM Regression error: {reg_error}')
+
+   ord_error = metrics.mean_squared_error(y_test, ord.predict(X_test), squared=False)
+   print(f'FM Ordinal Regression error: {ord_error}')
+
+   rf_error = metrics.mean_squared_error(y_test, rf.predict(X_test), squared=False)
+   print(f'Random Forest error: {rf_error}')

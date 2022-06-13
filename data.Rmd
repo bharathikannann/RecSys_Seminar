@@ -265,15 +265,18 @@ def encode_df(df, col_len, ohe_cols, ohe_encoders):
     # rating column (no need to add to col_len)
     df_final = pd.concat([df_final, df[['rating']]], axis = 1)
 
-    df_final.head()
     return df_final
 ```
 
 ```{python}
 col_len = {}
 
-df_train = encode_df(df_train, col_len, ohe_columns, ohe_encoders)
+#need to reset otherwise pd.concat will not work properly
+df_test.reset_index(inplace=True)
+df_train.reset_index(inplace=True)
+
 df_test = encode_df(df_test, col_len, ohe_columns, ohe_encoders)
+df_train = encode_df(df_train, col_len, ohe_columns, ohe_encoders)
 ```
 
 ```{python}
@@ -312,10 +315,6 @@ df_test = rf_df_test[final_columns]
 
 del(rf_df_train)
 del(rf_df_test)
-```
-
-```{python}
-df_test.shape
 ```
 
 ```{python}

@@ -24,6 +24,7 @@ import pickle
 from configparser import ConfigParser
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
+from sklearn.preprocessing import OneHotEncoder
 ```
 
 ### General helper functions
@@ -83,7 +84,14 @@ movie_ratings = pd.merge(movies, data)
 df = pd.merge(movie_ratings, users)
 ```
 
-### General preprocessing that applies to both FM and RF
+### Before split - general
+
+
+- These are columns that need to be preprocessed for both FM and RF, but are don't need to be split beforehand
+- Columns: 
+  - release_date
+  - sex
+  - zip_code
 
 ```{python}
 # dropping some rows that has no release date 
@@ -100,13 +108,15 @@ df['sex'] = (df['sex'] == 'M').astype(int)
 df['zip_code'] = df['zip_code'].str[0]
 ```
 
-```{python}
-# RF forest data needs to be preprocessed differently. 
-# Therefore need to save copy of df first
-rf_df = df.copy(deep=True)
-```
+### Before split - columns for FM
 
-### Preprocessing specific for FM
+
+- These are columns that need preprocessing specific for FM, but don't have to be split beforehand
+- Columns:
+  - age
+  - timestamp
+  - release_date
+- In addition, the one-hot-encoders are fitted here, before splitting
 
 ```{python}
 # format age
@@ -115,87 +125,70 @@ age_bins = np.arange(0,90,10)
 for i in range(len(age_bins)-1):
     age_labels.append(str(age_bins[i]) + '-' + str(age_bins[i+1]))
 # convert ages to group of age ranges
-df['age'] = pd.cut(df['age'], bins = age_bins, labels=age_labels)
+df['fm_age'] = pd.cut(df['age'], bins = age_bins, labels=age_labels)
 ```
 
 ```{python}
 # preprocess timestamp and release date
 # only use year, month and day from the datetime
-df['timestamp'] = df['timestamp'].apply(lambda x : date_only_from_datetime(x))
-df['release_date'] = df['release_date'].apply(lambda x : date_only_from_datetime(x))
+df['fm_timestamp'] = df['timestamp'].apply(lambda x : date_only_from_datetime(x))
+df['fm_release_date'] = df['release_date'].apply(lambda x : date_only_from_datetime(x))
 ```
 
 ```{python}
-# Start to set up df_final and col_len
-col_len = {}
-# initialize with the correct shape of 0 x 99991
-df_final = pd.DataFrame(columns = [], index = range(len(df)))
-```
-
-```{python}
-# columns that need ohe
-ohe_columns = ["movie_id", "user_id", "timestamp", "release_date", "zip_code", "age", "occupation"]
+# fit one-hot-encoders before train/test split
+ohe_columns = ["movie_id", "user_id", "fm_timestamp", "fm_release_date", "zip_code", "fm_age", "occupation"]
+ohe_encoders = []
 for col in ohe_columns:
-    df_dummies = pd.get_dummies(df[col], prefix=col)
-    col_len[col] = len(df_dummies.columns)
-    df_final = pd.concat([df_final, df_dummies], axis = 1)
-
-# special case: genre (already ohe in original dataset)
-col_len["genre"] = len(genre_cols)
-df_final = pd.concat([df_final, df[genre_cols]], axis = 1)
-
-# columns that don't need ohe
-non_ohe_columns = ["sex"]
-for col in non_ohe_columns:
-    col_len[col] = 1
-df_final = pd.concat([df_final, df[non_ohe_columns]], axis = 1)
-
-# rating column (no need to add to col_len)
-df_final = pd.concat([df_final, df[['rating']]], axis = 1)
-
-print(df_final.shape)
-print(col_len)
-df_final.head()
+    encoder = OneHotEncoder(dtype=int, sparse=False)
+    encoder.fit(df[[col]])
+    ohe_encoders.append(encoder)
 ```
+
+### Before split - columns for RF
+
+
+- These are columns that need preprocessing specific for RF, but don't need to be split beforehand
+- Columns: none at the moment.
+
+
+### Train/Test split
 
 ```{python}
 # Splitting the data into test and train
-X_train, X_test, y_train, y_test = train_test_split(df_final.drop(['rating'], axis = 1), df_final['rating'], random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(df.drop(['rating'], axis = 1), df['rating'], random_state=42)
 
 # training and test data is combined to a single dataframe
 df_train = pd.concat([X_train,pd.DataFrame(y_train)], axis = 1)
 df_test = pd.concat([X_test,pd.DataFrame(y_test)], axis = 1)
 
-```
-
-```{python}
-# Saving the FM data
-# create parent folder if doesn't exist
-os.makedirs(fm_export_path, exist_ok=True)
-
-# export csv file
-pickle.dump(df_train, open(fm_export_path + train_set_filename, 'wb'))
-pickle.dump(df_test, open(fm_export_path + test_set_filename, 'wb'))
-# df_train.to_csv(fm_export_path + 'ml-100k-preprocessed-train.csv', index = False)
-# df_test.to_csv(fm_export_path + 'ml-100k-preprocessed-test.csv', index = False)
-
-# saving info about data
-with open(fm_export_path + description_filename, "w") as outfile:
-    json.dump(col_len, outfile)
-
-# del to free up memory
 del(df)
 ```
 
-### Preprocessing specific for RF
+### After split - general
+
+
+- These are columns that have to be preprocessed after the split.
+- Columns:
+  - mean_rate
+  - cum_mean_rate
+  - last_watched
 
 ```{python}
-# Splitting the data into test and train
-X_train, X_test, y_train, y_test = train_test_split(rf_df.drop(['rating'], axis = 1), rf_df['rating'], random_state=42)
+# get last watched movie
+def get_last_watched(df):
+    df.sort_values(['user_id', 'timestamp'], inplace=True)
+    # shift the values in movie_id col down by one
+    df['last_watched'] = df['movie_id'].shift(1)
+    # then set the first value (first movie watched by the user) to 0
+    for index, user in users.iterrows():
+        idx = df[df['user_id'] == user['user_id']].index[0]
+        df.at[idx, 'last_watched'] = 0
+```
 
-# training and test data is combined to a single dataframe
-df_train = pd.concat([X_train,pd.DataFrame(y_train)], axis = 1)
-df_test = pd.concat([X_test,pd.DataFrame(y_test)], axis = 1)
+```{python}
+for df in [df_train, df_test]:
+    get_last_watched(df)
 ```
 
 ```{python}
@@ -224,14 +217,104 @@ df_train = df_train.merge(data_train, how='left', left_on=['timestamp', 'user_id
 # during testing we won't have the rating value, so we should use the running mean form training data.
 df_test['mean_rate'] = df_test['user_id'].apply(lambda x: get_mean_rating(x, mean_rating))
 df_test['cum_mean_rate'] = df_test['mean_rate']
+
+del(data_train)
 ```
 
 ```{python}
+# RF forest data needs to be preprocessed differently. 
+# Therefore need to save copy of dfs first
+rf_df_train = df_train.copy(deep=True)
+rf_df_test = df_test.copy(deep=True)
+```
+
+### After split - FM
+
+
+- These are steps that need to be performed after the split, and specifically for FM
+- Steps:
+  - OHE and other encoding
+  - Getting the feature column lengths (col_len)
+  - Saving the data
+- columns used in FM:
+  - movie_id, user_id, timestamp, release_date, zip_code, age, occupation, genre, sex, rating
+  - TODO: binary encoding last_watched, maybe?
+
+```{python}
+# create the final df and set col_len at the same time
+def encode_df(df, col_len, ohe_cols, ohe_encoders):
+    # create empty df with correct shape
+    df_final = pd.DataFrame(columns = [], index = range(len(df)))
+
+    # columns that need ohe
+    for index, col in enumerate(ohe_cols):
+        transform = pd.DataFrame(ohe_encoders[index].transform(df[[col]]), columns=ohe_encoders[index].get_feature_names_out())
+        df_final = pd.concat([df_final, transform], axis = 1)
+        col_len[col] = len(transform.columns)
+
+    # special case: genre (already ohe in original dataset)
+    col_len["genre"] = len(genre_cols)
+    df_final = pd.concat([df_final, df[genre_cols]], axis = 1)
+
+    # columns that don't need ohe
+    non_ohe_columns = ["sex"]
+    for col in non_ohe_columns:
+        col_len[col] = 1
+    df_final = pd.concat([df_final, df[non_ohe_columns]], axis = 1)
+
+    # rating column (no need to add to col_len)
+    df_final = pd.concat([df_final, df[['rating']]], axis = 1)
+
+    return df_final
+```
+
+```{python}
+col_len = {}
+
+#need to reset otherwise pd.concat will not work properly
+df_test.reset_index(inplace=True)
+df_train.reset_index(inplace=True)
+
+df_test = encode_df(df_test, col_len, ohe_columns, ohe_encoders)
+df_train = encode_df(df_train, col_len, ohe_columns, ohe_encoders)
+```
+
+```{python}
+# Saving the FM data
+# create parent folder if doesn't exist
+os.makedirs(fm_export_path, exist_ok=True)
+
+# export csv file
+pickle.dump(df_train, open(fm_export_path + train_set_filename, 'wb'))
+pickle.dump(df_test, open(fm_export_path + test_set_filename, 'wb'))
+
+# saving info about data
+with open(fm_export_path + description_filename, "w") as outfile:
+    json.dump(col_len, outfile)
+
+```
+
+### After split - RF
+
+
+- These are steps that need to be performed after the split, and specifically for RF
+- Steps:
+  - label encoding
+  - Saving the data
+- Columns used in RF:
+  - movie_id, user_id, timestamp, release_date, zip_code, age, 
+  occupation, sex, rating, last_watched, mean_rate, cum_mean_rate
+
+```{python}
+final_columns = ['movie_id', 'user_id', "timestamp", "release_date", "zip_code", "age", 
+"occupation", "sex", "rating", "last_watched", "mean_rate", "cum_mean_rate"]
+final_columns.extend(genre_cols)
 # droping all unnecessary columns
-unnecessary_columns_train = ["video_release_date", "imdb_url", "movie_title", "one", "cumsum"]
-unnecessary_columns_test = ["video_release_date", "imdb_url", "movie_title"]
-df_train.drop(unnecessary_columns_train, axis = 1, inplace = True)
-df_test.drop(unnecessary_columns_test, axis = 1, inplace = True)
+df_train = rf_df_train[final_columns]
+df_test = rf_df_test[final_columns]
+
+del(rf_df_train)
+del(rf_df_test)
 ```
 
 ```{python}
@@ -251,7 +334,5 @@ os.makedirs(rf_export_path, exist_ok=True)
 # Saving the RF data
 pickle.dump(df_train, open(rf_export_path + train_set_filename, 'wb'))
 pickle.dump(df_test, open(rf_export_path + test_set_filename, 'wb'))
-# df_train.to_csv(rf_export_path + train_set_filename, index = False)
-# df_test.to_csv(rf_export_path + test_set_filename, index = False)
 
 ```

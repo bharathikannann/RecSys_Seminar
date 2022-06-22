@@ -1,0 +1,10 @@
+1. Install jupytext extension
+pip install jupytext
+OR
+conda install jupytext -c conda-forge
+
+2. Create ipynb from Rmd file
+- Open the Rmd file in Jupyter Notebook, then save it. A new ipynb file will be created.
+
+3. Make your changes to the ipynb file
+- Don't modify the Rmd file

@@ -7,7 +7,7 @@ jupyter:
       format_version: '1.2'
       jupytext_version: 1.13.8
   kernelspec:
-    display_name: Python 3
+    display_name: Python 3 (ipykernel)
     language: python
     name: python3
 ---
@@ -21,6 +21,8 @@ import seaborn as sns
 import pickle
 import time
 from configparser import ConfigParser
+import os
+import json
 
 from sklearn.metrics import accuracy_score, confusion_matrix
 ```
@@ -40,6 +42,29 @@ model_info = config["MODELS"]
 model_path = model_info['model_path']
 fm_filename = model_info['fm_model_filename']
 rf_filename = model_info['rf_model_filename']
+
+fs_info = config["FEATURE_SELECTION"]
+fs_path = fs_info['fs_path']
+```
+
+## NOTES:
+- Follow filename format (pay attention to - and _): model-name_k.json
+- Save final outputs in this format: 
+    
+```
+    final_dict = {
+        "k": None,
+        "columns": [], # list type
+        "importances": [], # list type, in percentage, and should be sorted
+    }
+```
+- columns length must be same as importances length
+- importances must be in descending order, and columns should follow accordingly
+- Remember to exclude all movie_id and user_id columns before doing feature selection
+
+```{python active="", eval=FALSE}
+# create parent folder if doesn't exist
+os.makedirs(fs_path, exist_ok=True)
 ```
 
 ```{python}
@@ -50,7 +75,7 @@ test = pickle.load(open(rf_data_path + test_set_filename, 'rb'))
 ## Training data
 
 ```{python}
-X = train.drop((['rating']), axis = 1)
+X = train.drop((['rating', 'movie_id', 'user_id']), axis = 1)
 y = train['rating']
 ```
 
@@ -62,7 +87,7 @@ X_original = X.copy(deep = True)
 ## Test data
 
 ```{python}
-X_test = test.drop((['rating']), axis = 1)
+X_test = test.drop((['rating', 'movie_id', 'user_id']), axis = 1)
 y_test = test['rating']
 ```
 
@@ -133,6 +158,20 @@ rf_feature_importances['importance'] = rf_feature_importances['importance'] * 10
 ```
 
 ```{python}
+final_dict = {
+    "k": None,
+    "columns": rf_feature_importances['feature'].tolist(),
+    "importances": rf_feature_importances['importance'].tolist(),
+}
+```
+
+```{python}
+with open(fs_path + "random-forest-feature-importance.json", "w") as fp:
+    json.dump(final_dict, fp) 
+```
+
+```{python}
+# Visualization is nice to have, but not necessary
 # visualize the importance of each feature
 fig, ax = plt.subplots(figsize=(12,6))
 # ax.set_ylim([0, 30])

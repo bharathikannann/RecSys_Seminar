@@ -9,5 +9,6 @@ __pycache__/
 etc/
 dataset/fm/
 dataset/rf/
+feature_selection/
 models/
 *.ipynb

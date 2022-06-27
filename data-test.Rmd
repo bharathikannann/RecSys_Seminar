@@ -348,69 +348,22 @@ df_train.columns
 ```
 
 ```{python}
-# from sklearn.neighbors import KNeighborsClassifier
-
-# X = df_train.drop((['rating']), axis = 1)
-# y = df_train['rating']
-# knn = KNeighborsClassifier(n_neighbors=3)
-# sfs = SequentialFeatureSelector(knn, n_features_to_select=3)
-# sfs.fit(X, y)
-# SequentialFeatureSelector(estimator=KNeighborsClassifier(n_neighbors=3),
-#                           n_features_to_select=3)
-# sfs.get_support()
-# sfs.transform(X).shape
-```
-
-```{python}
-from sklearn.feature_selection import SequentialFeatureSelector as SFS
-from sklearn.neighbors import KNeighborsClassifier
-
-X_train = df_train.drop((['rating']), axis = 1)
-y_train = df_train['rating']
-
-model = KNeighborsClassifier(n_neighbors=10)
-
-sfs = SFS(model, 
-         n_features_to_select = 10,
-         direction = 'forward',
-         scoring = 'accuracy',
-         n_jobs = -1,
-         cv=10)
-
-sfs = sfs.fit(X_train, y_train)
-```
-
-```{python}
-X_train.shape[1]
-```
-
-```{python}
-X_train.columns
-```
-
-```{python}
 #X_train.T
 ```
 
 ```{python}
-np.arange(X_train.shape[1])[sfs.support_]
+#pip install mlxtend
 ```
 
 ```{python}
-print(X_train.columns[0])
-print(X_train.columns[9])
-print(X_train.columns[10])
-print(X_train.columns[11])
-print(X_train.columns[13])
-print(X_train.columns[14])
-print(X_train.columns[15])
-print(X_train.columns[17])
-print(X_train.columns[21])
-print(X_train.columns[29])
+#pip install mlxtend --upgrade --no-deps
 ```
 
 ```{python}
 from sklearn.preprocessing import StandardScaler
+
+X_train = df_train.drop((['rating']), axis = 1)
+y_train = df_train['rating']
 
 X_test = df_test.drop((['rating']), axis = 1)
 y_test = df_test['rating']
@@ -421,9 +374,9 @@ X_test_std = sc.transform(X_test)
 ```
 
 ```{python}
-#from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier
 
-#model = KNeighborsClassifier(n_neighbors=10)
+model = KNeighborsClassifier(n_neighbors=10)
 
 model.fit(X_train_std, y_train)
 
@@ -432,41 +385,89 @@ print('Test accuracy:', np.mean(model.predict(X_test_std) == y_test)*100)
 ```
 
 ```{python}
-from sklearn.feature_selection import SequentialFeatureSelector as SFS
-from sklearn.neighbors import KNeighborsClassifier
+#select the best 10 features
+from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 
-X_train = df_train.drop((['rating']), axis = 1)
-y_train = df_train['rating']
+sfs1 = SFS(model, 
+           k_features=10, 
+           forward=True, 
+           floating=False, 
+           verbose=2,
+           scoring='accuracy',
+           n_jobs=-1,
+           cv=5)
 
-model = KNeighborsClassifier(n_neighbors=10)
 
-sfs_back = SFS(model, 
-         n_features_to_select = 10,
-         direction = 'backward',
-         scoring = 'accuracy',
-         n_jobs = -1,
-         cv=10)
-
-sfs_back = sfs_back.fit(X_train, y_train)
+sfs1 = sfs1.fit(X_train_std, y_train)
 ```
 
 ```{python}
-np.arange(X_train.shape[1])[sfs_back.support_]
+sfs1.k_feature_idx_
 ```
 
 ```{python}
-print(X_train.columns[0])
-print(X_train.columns[9])
-print(X_train.columns[10])
-print(X_train.columns[11])
-print(X_train.columns[14])
-print(X_train.columns[17])
-print(X_train.columns[20])
-print(X_train.columns[21])
-print(X_train.columns[23])
-print(X_train.columns[29])
+X_train.columns[0]
 ```
 
 ```{python}
-sfs_back.get_support()
+X_train.columns[3]
+```
+
+```{python}
+# you can also use sfs1.k_feature_names_ if you fit the model with a pandas DataFrame
+
+df_train.columns[:][list(sfs1.k_feature_idx_)]
+```
+
+```{python}
+X_train.columns[:][list(sfs1.k_feature_idx_)]
+```
+
+```{python}
+X_train_sele = sfs1.transform(X_train_std)
+X_test_sele = sfs1.transform(X_test_std)
+
+model.fit(X_train_sele, y_train)
+print('Training accuracy:', np.mean(model.predict(X_train_sele) == y_train)*100)
+print('Test accuracy:', np.mean(model.predict(X_test_sele) == y_test)*100)
+```
+
+```{python}
+#inspecting the result
+sfs1.subsets_
+```
+
+```{python}
+metric_dict = sfs1.get_metric_dict(confidence_interval=0.95)
+metric_dict
+```
+
+```{python}
+df = pd.DataFrame.from_dict(metric_dict).T
+df
+```
+
+```{python}
+from mlxtend.plotting import plot_sequential_feature_selection as plot_sfs
+
+
+fig1 = plot_sfs(metric_dict, kind='std_dev')
+
+plt.title('Sequential Forward Selection (w. StdDev)')
+plt.grid()
+plt.show()
+```
+
+```{python}
+#Select the best subset of any size
+# sfs1 = SFS(model, 
+#            k_features="best", # or (1, 30) and then select by hand 
+#            forward=True, 
+#            floating=False, 
+#            verbose=0,
+#            scoring='accuracy',
+#            cv=5)
+
+
+# sfs1 = sfs1.fit(X_train_std, y_train)
 ```

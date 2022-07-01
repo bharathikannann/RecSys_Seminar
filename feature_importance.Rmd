@@ -44,7 +44,8 @@ fm_filename = model_info['fm_model_filename']
 rf_filename = model_info['rf_model_filename']
 
 fs_info = config["FEATURE_SELECTION"]
-fs_path = fs_info['fs_path']
+fs_fm_path = fs_info['fs_fm_path']
+fs_rf_path = fs_info['fs_rf_path']
 ```
 
 > **_Important:_**  Create a new heading for the model, and also be unique with variable names.  
@@ -71,7 +72,7 @@ fs_path = fs_info['fs_path']
 
 ```{python}
 # create parent folder if doesn't exist
-os.makedirs(fs_path, exist_ok=True)
+os.makedirs(fs_rf_path, exist_ok=True)
 ```
 
 ```{python}
@@ -174,7 +175,7 @@ rf_final_dict = {
 ```
 
 ```{python}
-with open(fs_path + "random-forest-feature-importance.json", "w") as fp:
+with open(fs_rf_path + "random-forest-feature-importance.json", "w") as fp:
     json.dump(rf_final_dict, fp) 
 ```
 
@@ -230,7 +231,7 @@ et_final_dict = {
     "importances": et_feature_importances['importance'].tolist(),
 }
 
-with open(fs_path + "extra-tree-classifier-feature-importance.json", "w") as fp:
+with open(fs_rf_path + "extra-tree-classifier-feature-importance.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 
@@ -273,7 +274,7 @@ et_final_dict = {
     "importances": forest_importances.values.tolist(),
 }
 
-with open(fs_path + "permutation_importance.json", "w") as fp:
+with open(fs_rf_path + "permutation_importance.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 
@@ -349,7 +350,7 @@ et_final_dict = {
     "importances": None,
 }
 
-with open(fs_path + "select_from_model.json", "w") as fp:
+with open(fs_rf_path + "select_from_model.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 

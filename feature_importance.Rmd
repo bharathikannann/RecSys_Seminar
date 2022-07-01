@@ -231,7 +231,7 @@ et_final_dict = {
     "importances": et_feature_importances['importance'].tolist(),
 }
 
-with open(fs_path + "extra-tree-classifier-feature-importance.json", "w") as fp:
+with open(fs_rf_path + "extra-tree-classifier-feature-importance.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 
@@ -274,7 +274,7 @@ et_final_dict = {
     "importances": forest_importances.values.tolist(),
 }
 
-with open(fs_path + "permutation_importance.json", "w") as fp:
+with open(fs_rf_path + "permutation_importance.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 
@@ -350,7 +350,7 @@ et_final_dict = {
     "importances": None,
 }
 
-with open(fs_path + "select_from_model.json", "w") as fp:
+with open(fs_rf_path + "select_from_model.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 

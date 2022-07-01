@@ -353,23 +353,22 @@ with open(fs_path + "select_from_model.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 
-# Loading columns
+# Van Methods
 
 ```{python}
-import json
-available_methods = []
-for subdir, dirs, files in os.walk(fs_path):
-    for file in files:
-        available_methods.append(file)
-        
-f = open(fs_path + available_methods[3])
-data = json.load(f)
 
-for i in data['columns']:
-    print(i)
-
-f.close()
 ```
+
+---
+
+
+# Fadi Methods
+
+```{python}
+
+```
+
+---
 
 ```{python}
 

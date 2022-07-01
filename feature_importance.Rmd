@@ -7,7 +7,7 @@ jupyter:
       format_version: '1.2'
       jupytext_version: 1.13.8
   kernelspec:
-    display_name: Python 3 (ipykernel)
+    display_name: Python 3
     language: python
     name: python3
 ---
@@ -47,22 +47,29 @@ fs_info = config["FEATURE_SELECTION"]
 fs_path = fs_info['fs_path']
 ```
 
-## NOTES:
-- Follow filename format (pay attention to - and _): model-name_k.json
+> **_Important:_**  Create a new heading for the model, and also be unique with variable names.  
+
+### NOTES:
 - Save final outputs in this format: 
     
-```
-    final_dict = {
+```python
+    x_final_dict = {
         "k": None,
         "columns": [], # list type
         "importances": [], # list type, in percentage, and should be sorted
     }
 ```
+- x - your model name
 - columns length must be same as importances length
 - importances must be in descending order, and columns should follow accordingly
-- Remember to exclude all movie_id and user_id columns before doing feature selection
+- Remember to exclude all movie_id and user_id columns before doing feature selection (optional and experiment with this one)
 
-```{python active="", eval=FALSE}
+### Then follow this format to save dictionary to json
+
+- Follow filename format (pay attention to - and _): model-name_k.json
+    - k - if you have any k values or just model_name
+
+```{python}
 # create parent folder if doesn't exist
 os.makedirs(fs_path, exist_ok=True)
 ```
@@ -109,7 +116,8 @@ It was the same and this code is just for reference. Will be removed at the end.
 ```
 
 ---
-# 1. Feature importance using random forest
+# 1. Feature Importance
+# 1.1 Feature importance using Random Forest
 
 ```{python}
 from sklearn.ensemble import RandomForestClassifier
@@ -154,11 +162,11 @@ rf_feature_importances.sort_values("importance", ascending=False,inplace=True)
 
 ```{python}
 # Converting the importances to percentage
-rf_feature_importances['importance'] = rf_feature_importances['importance'] * 100
+# rf_feature_importances['importance'] = rf_feature_importances['importance'] * 100
 ```
 
 ```{python}
-final_dict = {
+rf_final_dict = {
     "k": None,
     "columns": rf_feature_importances['feature'].tolist(),
     "importances": rf_feature_importances['importance'].tolist(),
@@ -167,7 +175,7 @@ final_dict = {
 
 ```{python}
 with open(fs_path + "random-forest-feature-importance.json", "w") as fp:
-    json.dump(final_dict, fp) 
+    json.dump(rf_final_dict, fp) 
 ```
 
 ```{python}
@@ -183,16 +191,11 @@ fig.tight_layout()
 
 ---
 
-# 2. Extra Tree Cassifier
+# 1. 2. Extra Tree Cassifier
 
 ```{python}
 from sklearn.ensemble import ExtraTreesClassifier
 ```
-
-
-
-
-
 ```{python}
 extra_tree = ExtraTreesClassifier()
 extra_tree.fit(X,y)
@@ -220,8 +223,18 @@ fig.tight_layout()
 ```
 
 ```{python}
-# Visualizing top 10 common features for random forest and extra trees
+# save the info
+et_final_dict = {
+    "k": None,
+    "columns": et_feature_importances['feature'].tolist(),
+    "importances": et_feature_importances['importance'].tolist(),
+}
+
+with open(fs_path + "extra-tree-classifier-feature-importance.json", "w") as fp:
+    json.dump(et_final_dict, fp) 
 ```
+
+Visualizing top 10 common features for random forest and extra trees
 
 ```{python}
 common_imp_features = pd.merge(rf_feature_importances.iloc[:11], et_feature_importances.iloc[:11], how = 'inner', on = ['feature'])
@@ -233,9 +246,11 @@ common_imp_features.rename(columns={'importance_x':'random_forest_importance','i
 common_imp_features.plot.bar(x='feature', y=['random_forest_importance','extra_tree_importance'], legend=True)
 ```
 
-```{python}
-# both trees almost gave the same important features. These are the top 10 important features for our dataset.
-```
+both trees almost gave the same important features. These are the top 10 important features for our dataset.
+
+
+___
+# 2. Permutation Importance
 
 ```{python}
 from sklearn.inspection import permutation_importance
@@ -247,10 +262,22 @@ elapsed_time = time.time() - start_time
 print(f"Elapsed time to compute the importances: {elapsed_time:.3f} seconds")
 
 forest_importances = pd.Series(result.importances_mean, index=feature_names)
+forest_importances.sort_values(ascending=False,inplace=True)
 ```
 
 ```{python}
-forest_importances.sort_values(ascending=False,inplace=True)
+# save the info
+et_final_dict = {
+    "k": None,
+    "columns": forest_importances.index.tolist(),
+    "importances": forest_importances.values.tolist(),
+}
+
+with open(fs_path + "permutation_importance.json", "w") as fp:
+    json.dump(et_final_dict, fp) 
+```
+
+```{python}
 fig, ax = plt.subplots(figsize=(12,6))
 forest_importances.plot.bar(yerr=result.importances_std, ax=ax)
 ax.set_title("Feature importances using permutation on full model")
@@ -259,33 +286,31 @@ fig.tight_layout()
 plt.show()
 ```
 
-```{python}
+---
 # Analysis - Correlation matrix with heatmap
-```
 
 ```{python}
 #get correlations of each features in dataset and plot heatmap
-corrmat = df_train.corr()
+corrmat = pd.concat([X,y], axis = 1).corr()
 top_corr_features = corrmat.index
 plt.figure(figsize=(24,24))
-g=sns.heatmap(df_train[top_corr_features].corr(),annot=True,cmap="RdYlGn")
+g=sns.heatmap(pd.concat([X,y], axis = 1)[top_corr_features].corr(),annot=True,cmap="RdYlGn")
 plt.tight_layout()
 ```
 
 ```{python}
 plt.figure(figsize=(24,10))
-g2=sns.heatmap(pd.DataFrame(df_train[top_corr_features].corr().loc['rating']).T,annot=False,cmap="RdYlGn")
+g2=sns.heatmap(pd.DataFrame(pd.concat([X,y], axis = 1)[top_corr_features].corr().loc['rating']).T,annot=False,cmap="RdYlGn")
 ```
 
-```{python}
-# this heatmap is to show which features are highly correlated with the output feature
-# positive - increase in one value increases the target value and viceversa
-# cummulative mean rating and and mean rating have high correlation with the rating. 
-# this is because these features are extracted from rating. 
-# movie id and release date don't have high correlation with the rating, but still those features are important. 
-```
+- This heatmap is to show which features are highly correlated with the output feature
+- positive - increase in one value increases the target value and viceversa
+- cummulative mean rating and and mean rating have high correlation with the rating. 
+- this is because these features are extracted from rating. 
+- movie id and release date don't have high correlation with the rating, but still those features are important. 
 
-## Embedded methods
+
+# 3. Embedded methods
 
 ```{python}
 from sklearn.preprocessing import StandardScaler
@@ -317,7 +342,33 @@ print('features with coefficients shrank to zero: {}'.format(
 ```
 
 ```{python}
-pd.DataFrame(selected_feat)
+# save the info
+et_final_dict = {
+    "k": None,
+    "columns": selected_feat.tolist(),
+    "importances": None,
+}
+
+with open(fs_path + "select_from_model.json", "w") as fp:
+    json.dump(et_final_dict, fp) 
+```
+
+# Loading columns
+
+```{python}
+import json
+available_methods = []
+for subdir, dirs, files in os.walk(fs_path):
+    for file in files:
+        available_methods.append(file)
+        
+f = open(fs_path + available_methods[3])
+data = json.load(f)
+
+for i in data['columns']:
+    print(i)
+
+f.close()
 ```
 
 ```{python}

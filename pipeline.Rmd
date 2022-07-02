@@ -119,6 +119,7 @@ def covert_rf_to_fm(choose_method:int, x_col_rf, X_train, genre_cols):
     '''
     Convert the columns obtained from rf dataset methods to fm dataset
     * choose_method - choosen method form the available methods
+    * x_cols_rf - the selected columns by the  method
     * genre_cols - The total genre list. Used to group them in group shapes.
                    Every genre is a different feaure in random forest. but in MyFM 
                    all the genre should be combined into a single key.
@@ -146,7 +147,7 @@ def covert_rf_to_fm(choose_method:int, x_col_rf, X_train, genre_cols):
     meta_data_rf = OrderedDict()
     X_train_rf = pd.DataFrame([])
     
-    # Convert only the column present in the selected method
+    # Convert only the column's present in the selected method
     for col in x_col_rf:
         # For all normal ohe columns
         if col in ['movie_id','user_id','fm_timestamp','fm_release_date','zip_code','fm_age','occupation','last_watched','sex','age']:
@@ -158,14 +159,14 @@ def covert_rf_to_fm(choose_method:int, x_col_rf, X_train, genre_cols):
     # Processing mean and cummulative mean rating
     # --------------------------------------------------------
     # For mean rating, it has the same characters with cum_mean_rate and has no unique words
-    # So these columns are processed separately. It is done at last to make any confusion :)
+    # So these columns are processed separately. It is done at last to not make any confusion :)
     # if both are present
     if 'mean_rate' and 'cum_mean_rate' in x_col_rf:
-        # a is union, has both mean and cum because of regex
-        # b is intersction and has only cum_mean_rating
+        # a is union, has both mean and cum_mean_rate because of regex
+        # b has only cum_mean_rating
         a = X_train.filter(regex='mean_rate', axis=1)
         b = X_train.filter(regex='cum_mean_rate', axis=1)
-        # Negation of 'b' with 'a' gives only mean_rating and it is selected from union
+        # Taking intersection with a and b gives cum_mean_rate and its negation will give mean_rate
         # cum_mean_rating will be NAN and droppped
         a = a[~a.isin(b)].dropna(axis=1)
         X_train_rf = pd.concat([X_train_rf, a], axis = 1)
@@ -173,19 +174,22 @@ def covert_rf_to_fm(choose_method:int, x_col_rf, X_train, genre_cols):
         meta_data_rf['mean_rate'] = a.shape[1]
         meta_data_rf['cum_mean_rate'] = b.shape[1]
         
-    # If atleast 1 is present, No clash and there will be no clash
+    # If atleast 1 is present, There will be no clash so processed normally
     else:
         for col in x_col_rf:
             if col in ['mean_rate','cum_mean_rate']:
-                X_train_rf = pd.concat([X_train_rf, X_train[col]], axis = 1)
-                meta_data_rf[col] = 1
+                temp = X_train.filter(regex=col, axis=1)
+                X_train_rf = pd.concat([X_train_rf, temp], axis = 1)
+                meta_data_rf[col] = temp.shape[1]
     
     # Processing genre
     # --------------------------------------------------------
     # Genre is combined into a single key in group shapes
-    meta_data_rf['genre'] = 0
-    for col in x_col_rf:
-        if col in genre_cols:
+    # If there are any genre columns in x_col_rf
+    if list(set(genre_cols) & set(x_col_rf)):
+        meta_data_rf['genre'] = 0
+        # For all the genre in x_col_rf
+        for col in list(set(genre_cols) & set(x_col_rf)):
             temp = X_train.filter(regex=col, axis=1)
             X_train_rf = pd.concat([X_train_rf, temp], axis = 1)
             meta_data_rf['genre'] = meta_data_rf['genre'] + 1 

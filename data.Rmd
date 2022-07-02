@@ -247,6 +247,17 @@ ohe_encoders[-1].feature_names_in_ = [ohe_columns[-1]]
 ```
 
 ```{python}
+# add mean_rate and cum_mean_rate to encoder
+for col in ['mean_rate', 'cum_mean_rate']:
+    df_train[col] = df_train[col].apply(lambda rate: int(round(rate, 1)*10))
+    df_test[col] = df_test[col].apply(lambda rate: int(round(rate, 1)*10))
+    ohe_columns.append(col)
+    encoder = OneHotEncoder(categories=[[i for i in range(10,51,1)]], dtype=int, sparse=False)
+    encoder.fit(df_train[[col]])
+    ohe_encoders.append(encoder)
+```
+
+```{python}
 # create the final df and set col_len at the same time
 def encode_df(df, col_len, ohe_cols, ohe_encoders):
     # create empty df with correct shape

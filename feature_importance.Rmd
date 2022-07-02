@@ -46,6 +46,9 @@ rf_filename = model_info['rf_model_filename']
 fs_info = config["FEATURE_SELECTION"]
 fs_fm_path = fs_info['fs_fm_path']
 fs_rf_path = fs_info['fs_rf_path']
+
+path = dataset_info['ori_path']
+genre_cols = pd.read_csv(path + 'ml-100k/u.genre', sep='|', header=None)[0].to_numpy().tolist()
 ```
 
 > **_Important:_**  Create a new heading for the model, and also be unique with variable names.  
@@ -180,11 +183,49 @@ with open(fs_rf_path + "random-forest-feature-importance.json", "w") as fp:
 ```
 
 ```{python}
+s = 0
+for i in rf_feature_importances['feature']:
+    if i in genre_cols:
+        s = s + rf_feature_importances[rf_feature_importances['feature'] == i]['importance'].values[0]
+```
+
+```{python}
+rf_feature_importances_modified_genre = rf_feature_importances.copy(deep=True)
+```
+
+```{python}
+rf_feature_importances_modified_genre.index = rf_feature_importances_modified_genre['feature']
+```
+
+```{python}
+rf_feature_importances_modified_genre.drop(genre_cols, inplace = True, axis = 0)
+```
+
+```{python}
+rf_feature_importances_modified_genre.loc['genre'] = ['genre',s]
+```
+
+```{python}
+rf_feature_importances_modified_genre.sort_values("importance", ascending=False,inplace=True)
+```
+
+```{python}
 # Visualization is nice to have, but not necessary
 # visualize the importance of each feature
 fig, ax = plt.subplots(figsize=(12,6))
 # ax.set_ylim([0, 30])
 rf_feature_importances.plot.bar(x='feature', y='importance', ax=ax, legend=False, stacked = True)
+ax.set_title("Feature importances")
+ax.set_ylabel("Importance in %")
+fig.tight_layout()
+```
+
+```{python}
+# Visualization is nice to have, but not necessary
+# visualize the importance of each feature
+fig, ax = plt.subplots(figsize=(5,6))
+# ax.set_ylim([0, 30])
+rf_feature_importances_modified_genre.plot.bar(x='feature', y='importance', ax=ax, legend=False, stacked = True)
 ax.set_title("Feature importances")
 ax.set_ylabel("Importance in %")
 fig.tight_layout()

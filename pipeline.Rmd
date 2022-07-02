@@ -76,6 +76,9 @@ with open(fm_data_path + description_filename) as f:
     group_shapes = [v for k,v in meta_data.items()]
 ```
 
+---
+
+
 # Random Forest column names to MyFM columns
 
 ```{python}
@@ -127,7 +130,7 @@ def covert_rf_to_fm(choose_method:int, x_col_rf, X_train, genre_cols):
     # --------------------------------------------------------
     # Timestamp and release date columns have extra 'fm' character before. 
     # For conversion of rf columns to fm columns, names are changed
-    for col in ['timestamp', 'release_date']:
+    for col in ['timestamp', 'release_date', 'age']:
         if col in x_col_rf:
             x_col_rf.remove(col)
             x_col_rf.append('fm_' + col)
@@ -146,7 +149,7 @@ def covert_rf_to_fm(choose_method:int, x_col_rf, X_train, genre_cols):
     # Convert only the column present in the selected method
     for col in x_col_rf:
         # For all normal ohe columns
-        if col in ['movie_id','user_id','fm_timestamp','fm_release_date','zip_code','fm_age','occupation','last_watched','sex']:
+        if col in ['movie_id','user_id','fm_timestamp','fm_release_date','zip_code','fm_age','occupation','last_watched','sex','age']:
             # Filter method filters columns which contains the regex argument
             temp = X_train.filter(regex=col, axis=1)
             X_train_rf = pd.concat([X_train_rf, temp], axis = 1)
@@ -190,109 +193,46 @@ def covert_rf_to_fm(choose_method:int, x_col_rf, X_train, genre_cols):
     return X_train_rf, meta_data_rf
 ```
 
+# Select from Model Dataset
+
+
 ### Choosing the method for current evaluation
 
-
-> **Important - Need to change the name of the selected columns (sel_from_model_col_rf) for everymethod**
+> **Important - Need to change the name of the selected columns (sel_from_model_col_rf) for everymethod and also chosse the corresponding method id**
 
 ```{python}
 # The index in the available methods list represents the model we are choosing now
 # 3 - select-from-model method
 choose_method = 3
+
+# get features for the method
 sel_from_model_col_rf = selected_col_dict_rf[available_methods_rf[choose_method]]["columns"]
-```
 
-```{python}
-sel_from_model_col_rf
-```
-
-```{python}
+# convert the dateset
 X_train_sel_from_model, meta_data_sel_from_model = covert_rf_to_fm(choose_method, sel_from_model_col_rf, X_train, genre_cols)
-```
-
-```{python}
 meta_data_sel_from_model
 ```
 
+# Random forest Dataset
+- Top N features are picked. N - hyperparameter 
+
 ```{python}
-X_train_sel_from_model.iloc[:,1680+240+1681+943:]
+choose_method = 2
+
+# No of top N features to get
+get_top_N_fetaures = 10
+
+# get features for the method
+random_forest_col_rf = selected_col_dict_rf[available_methods_rf[choose_method]]["columns"]
+
+# convert the dateset
+X_train_random_forest, meta_data_random_forest = covert_rf_to_fm(choose_method, random_forest_col_rf[:get_top_N_fetaures], X_train, genre_cols)
+meta_data_random_forest
 ```
 
-```{python}
-# Timestamp and release date columns have extra 'fm' character before. 
-# For conversion for rf columns to fm columns, names are changed
-for col in ['timestamp', 'release_date']:
-    if col in sel_from_model_col_rf:
-        sel_from_model_col_rf.remove(col)
-        sel_from_model_col_rf.append('fm_'+col)
-
-# Adding movie_id and user_id columns if not present
-for col in ['movie_id', 'user_id']:
-    if col not in sel_from_model_col_rf:
-        sel_from_model_col_rf.append(col)
-```
+---
 
 ```{python}
-meta_data_rf = OrderedDict()
-X_train_rf = pd.DataFrame([])
-```
-
-```{python}
-X_col_rf = sel_from_model_col_rf
-```
-
-```{python}
-for col in X_col_rf:
-    if col in ['movie_id','user_id','fm_timestamp','fm_release_date','zip_code','fm_age','occupation','last_watched','sex']:
-        temp = X_train.filter(regex=col, axis=1)
-        X_train_rf = pd.concat([X_train_rf, temp], axis = 1)
-        meta_data_rf[col] = temp.shape[1]
-        
-if 'mean_rate' and 'cum_mean_rate' in X_col_rf:
-    a = X_train.filter(regex='mean_rate', axis=1)
-    b = X_train.filter(regex='cum_mean_rate', axis=1)
-    a = a[~a.isin(b)].dropna(axis=1)
-    X_train_rf = pd.concat([X_train_rf, a], axis = 1)
-    X_train_rf = pd.concat([X_train_rf, b], axis = 1)
-    meta_data_rf['mean_rate'] = a.shape[1]
-    meta_data_rf['cum_mean_rate'] = b.shape[1]
-else:
-    for col in X_col_rf:
-        if col in ['mean_rate','cum_mean_rate']:
-            X_train_rf = pd.concat([X_train_rf, X_train[col]], axis = 1)
-            meta_data_rf[col] = 1
-
-meta_data_rf['genre'] = 0
-for col in X_col_rf:
-    if col in genre_cols:
-        temp = X_train.filter(regex=col, axis=1)
-        X_train_rf = pd.concat([X_train_rf, temp], axis = 1)
-        meta_data_rf['genre'] = meta_data_rf['genre'] + 1      
-```
-
-```{python}
-if 'mean_rate' and 'cum_mean_rate' in ['mean_rate','cum_mean_rate']:
-    print("Hi")
-```
-
-```{python}
-a = X_train.filter(regex='jvhj', axis=1)
-```
-
-```{python}
-b = X_train.filter(regex='cum_mean_rate', axis=1)
-```
-
-```{python}
-a = a[~a.isin(b)].dropna(axis=1)
-```
-
-```{python}
-meta_data_rf
-```
-
-```{python}
-
 # callback = MyRegressionCallback(5, X_test, y_test.values)
 
 # create parent folder if doesn't exist

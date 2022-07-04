@@ -374,8 +374,8 @@ from sklearn.datasets import load_digits
 from sklearn.feature_selection import RFE
 import matplotlib.pyplot as plt
 
-X = train.drop((['rating', 'movie_id', 'user_id']), axis = 1)
-y = train['rating']
+# X = train.drop((['rating', 'movie_id', 'user_id']), axis = 1)
+# y = train['rating']
 
 # Create the RFE object and rank each pixel
 svc = SVC(kernel="linear", C=1)
@@ -392,11 +392,22 @@ plt.show()
 ```
 
 ```{python}
-from sklearn.datasets import load_diabetes
+# list of column names
+feature_names = list(X.columns)
 
-diabetes = load_diabetes()
-X, y = diabetes.data, diabetes.target
-print(diabetes.DESCR)
+# extract the feature importance values
+std = np.std([tree.feature_importances_ for tree in rfe.estimators_], axis=0)
+RFE_feature_importances = pd.DataFrame(
+    {"feature": feature_names, "importance": rfe.feature_importances_}
+)
+```
+
+```{python}
+RFE_final_dict = {
+    "k": None,
+    "columns": RFE_feature_importances['feature'].tolist(),
+    "importances": RFE_feature_importances['importance'].tolist(),
+}
 ```
 
 ```{python}
@@ -423,10 +434,6 @@ plt.bar(height=importance, x=feature_names)
 plt.title("Feature importances via coefficients")
 plt.show()
 
-```
-
-```{python}
-importance.tolist()
 ```
 
 ```{python}
@@ -457,24 +464,24 @@ print(f"Done in {toc - tic:.3f}s")
 
 ```{python}
 from sklearn.svm import SVC
->>> from sklearn.preprocessing import StandardScaler
->>> from sklearn.datasets import make_classification
->>> from sklearn.model_selection import train_test_split
->>> from sklearn.pipeline import Pipeline
->>> 
->>> pipe = Pipeline([('scaler', StandardScaler()), ('svc', SVC())])
->>> # The pipeline can be used as any other estimator
->>> # and avoids leaking the test set into the train set
->>> pipe.fit(X, y)
+ from sklearn.preprocessing import StandardScaler
+ from sklearn.datasets import make_classification
+ from sklearn.model_selection import train_test_split
+ from sklearn.pipeline import Pipeline
+ 
+ pipe = Pipeline([('scaler', StandardScaler()), ('svc', SVC())])
+ # The pipeline can be used as any other estimator
+ # and avoids leaking the test set into the train set
+ pipe.fit(X, y)
 Pipeline(steps=[('scaler', StandardScaler()), ('svc', SVC())])
->>> pipe.score(X, y)
+ pipe.score(X, y)
 ```
 
 ```{python}
 # save the info
 p_final_dict = {
     "k": None,
-    "columns":  Pipeline.tolist(),
+    "columns":  pipe.tolist(),
     "importances": importance.tolist(),
 }
 

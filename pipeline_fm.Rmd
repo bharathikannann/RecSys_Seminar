@@ -1,0 +1,183 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.13.8
+  kernelspec:
+    display_name: Python 3 (ipykernel)
+    language: python
+    name: python3
+---
+
+```{python}
+from sklearn import metrics
+from sklearn.ensemble import RandomForestRegressor
+import pandas as pd
+from configparser import ConfigParser
+import json
+import os
+from os.path import exists
+import pickle
+import numpy as np
+
+from myfm import MyFMRegressor
+# from myfm.utils.callbacks import RegressionCallback
+
+# class MyRegressionCallback(RegressionCallback):
+#     def __call__(self, i, fm, hyper, history):
+#         should_stop, description = super(MyRegressionCallback, self).__call__(i, fm, hyper, history)
+#         trace_result = self.result_trace[-1]
+#         if len(self.result_trace) > 8:
+#             for index in range(8):
+#                 old_trace_result = self.result_trace[-(index + 1)]
+#                 if abs(old_trace_result['rmse'] - trace_result['rmse']) > 0.0001:
+#                     return (should_stop, description)
+#             return (True, description)
+#         return (should_stop, description)
+```
+
+```{python}
+#Read config.ini file
+config = ConfigParser()
+config.read("config.ini")
+dataset_info = config["DATASETS"]
+fm_data_path = dataset_info['fm_path']
+rf_data_path = dataset_info['rf_path']
+train_set_filename = dataset_info['train_filename']
+test_set_filename = dataset_info['test_filename']
+description_filename = dataset_info['description_filename']
+
+model_info = config["MODELS"]
+model_path = model_info['model_path']
+fm_filename = model_info['fm_model_filename']
+rf_filename = model_info['rf_model_filename']
+
+fs_info = config["FEATURE_SELECTION"]
+fs_fm_path = fs_info['fs_fm_path']
+fs_rf_path = fs_info['fs_rf_path']
+
+results_info = config["RESULTS"]
+results_path = results_info['results_path']
+results_fm_filename = results_info['results_fm_filename']
+results_rf_filename = results_info['results_rf_filename']
+```
+
+```{python}
+def load_ori_data(path):
+    train = pickle.load(open(path + train_set_filename, 'rb'))
+    test = pickle.load(open(path + test_set_filename, 'rb'))
+    
+#     train = train[:100]
+#     test = test[:100]
+    
+    X_train = train.drop(['rating'], axis=1)
+    X_test = test.drop(['rating'], axis=1)
+    y_train = train['rating']
+    y_test = test['rating']
+    return X_train, X_test, y_train, y_test
+```
+
+```{python}
+def recalculate_group_shapes(cols_to_keep):
+    with open(fm_data_path + description_filename) as f:
+        meta_data = json.load(f)
+        # group_shapes = [v for k,v in meta_data.items()]
+    movie_genres = ['unknown','Action','Adventure','Animation',"Children's",'Comedy','Crime','Documentary',
+                    'Drama','Fantasy','Film-Noir','Horror','Musical','Mystery','Romance','Sci-Fi','Thriller',
+                    'War','Western']
+    for col, _ in meta_data.items():
+        if (col != 'movie_id' and col != 'user_id'):
+            meta_data[col] = 0
+    for col_name in cols_to_keep:
+        if col_name in movie_genres:
+            meta_data['genre'] += 1
+        else:
+            for prefix, _ in meta_data.items():
+                if prefix in col_name:
+                    meta_data[prefix] += 1
+    to_delete = []
+    for col, val in meta_data.items():
+        if val == 0:
+            to_delete.append(col)
+    for col in to_delete:
+        del meta_data[col]
+    return [v for k,v in meta_data.items()]
+
+```
+
+```{python}
+def fm_train_and_test(fs_method, X_train, y_train, X_test, y_test, group_shapes):
+    fm = MyFMRegressor(rank=1).fit(X_train, y_train, n_iter=300, group_shapes=group_shapes)
+    fm_error = metrics.mean_squared_error(y_test, fm.predict(X_test), squared=False)
+    # create parent folder if doesn't exist
+    os.makedirs(results_path, exist_ok=True)
+    with open(results_path + results_fm_filename, "a") as f:
+        f.write(fs_method + ": " + str(fm_error) + "\n")
+    # print(f'FM Regression error: {fm_error}')
+```
+
+```{python}
+def rf_train_and_test(fs_method, X_train, y_train, X_test, y_test):
+    rf = RandomForestRegressor(n_estimators = 100, random_state = 42).fit(X_train, y_train)
+    rf_error = metrics.mean_squared_error(y_test, rf.predict(X_test), squared=False)
+    os.makedirs(results_path, exist_ok=True)
+    with open(results_path + results_rf_filename, "a") as f:
+        f.write(fs_method + ": " + str(rf_error) + "\n")
+    # print(f'Random Forest error: {rf_error}')
+
+```
+
+```{python}
+def use_fs_for_fm(fs_method):
+    X_train, X_test, y_train, y_test = load_ori_data(fm_data_path)
+    with open(fs_fm_path + fs_method) as f:
+        fs = json.load(f)
+        total_cols_to_keep = fs['k']
+        cols_to_keep = fs['columns']
+        importances = fs['importances']
+        if total_cols_to_keep == None:
+            total_cols_to_keep = 10
+    final_cols_to_keep = [col for col in X_train.columns if 'movie_id' in col or 'user_id' in col]
+    final_cols_to_keep.extend(cols_to_keep[:total_cols_to_keep])
+
+    # dropping the columns specified by the fs method
+    X_train = X_train[final_cols_to_keep]
+    X_test = X_test[final_cols_to_keep]
+    group_shapes = recalculate_group_shapes(cols_to_keep)
+    fm_train_and_test(fs_method, X_train, y_train, X_test, y_test, group_shapes)
+```
+
+```{python}
+def use_fs_for_rf(fs_method):
+    X_train, X_test, y_train, y_test = load_ori_data(rf_data_path)
+    with open(fs_rf_path + fs_method) as f:
+        fs = json.load(f)
+        total_cols_to_keep = fs['k']
+        cols_to_keep = fs['columns']
+        importances = fs['importances']
+        if total_cols_to_keep == None:
+            total_cols_to_keep = 10
+    final_cols_to_keep = [col for col in X_train.columns if 'movie_id' in col or 'user_id' in col]
+    final_cols_to_keep.extend(cols_to_keep[:total_cols_to_keep])
+
+    # dropping the columns specified by the fs method
+    X_train = X_train[final_cols_to_keep]
+    X_test = X_test[final_cols_to_keep]
+    rf_train_and_test(fs_method, X_train, y_train, X_test, y_test)
+```
+
+```{python}
+# and 'movie_id' not in col and 'user_id' not in col loop for FM
+for fs_method in os.listdir(fs_fm_path):
+    use_fs_for_fm(fs_method)
+```
+
+```{python}
+# loop for RF
+for fs_method in os.listdir(fs_rf_path):
+    use_fs_for_rf(fs_method)
+
+```

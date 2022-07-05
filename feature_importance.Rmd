@@ -7,7 +7,7 @@ jupyter:
       format_version: '1.2'
       jupytext_version: 1.13.8
   kernelspec:
-    display_name: Python 3
+    display_name: Python 3 (ipykernel)
     language: python
     name: python3
 ---
@@ -356,12 +356,185 @@ with open(fs_rf_path + "select_from_model.json", "w") as fp:
 
 # Van Methods
 
-```{python}
 
+### Feature selection with Mutual Information Regression method
+
+```{python}
+from sklearn.feature_selection import mutual_info_regression
 ```
 
----
+```{python}
+mutual_info = mutual_info_regression(X, y)
+mutual_info
+```
 
+```{python}
+mutual_info = pd.Series(mutual_info)
+mutual_info.index = X.columns
+mutual_info.sort_values(ascending=False)
+```
+
+```{python}
+mutual_info.sort_values(ascending=False).plot.bar(figsize=(15,5))
+```
+
+```{python}
+mutual_info_sort = mutual_info.sort_values(ascending=False)
+```
+
+```{python}
+# save the info
+mi_final_dict = {
+    "k": None,
+    "columns": mutual_info_sort.index.tolist(),
+    "importances": mutual_info_sort.values.tolist(),
+}
+
+with open(fs_rf_path + "mutual_importance_regression.json", "w") as fp:
+    json.dump(mi_final_dict, fp) 
+```
+
+### Feature selection with F regression method
+
+```{python}
+from sklearn.datasets import make_regression
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import f_regression
+```
+
+```{python}
+# feature selection function
+def select_features(X, y, X_test):
+    # configure to select all features
+    fs = SelectKBest(score_func=f_regression, k='all')
+    # learn relationship from training data
+    fs.fit(X, y)
+    # transform train input data
+    X_fs = fs.transform(X)
+    # transform test input data
+    X_test_fs = fs.transform(X_test)
+    return X_fs, X_test_fs, fs
+```
+
+```{python}
+# feature selection
+X_fs, X_test_fs, fs = select_features(X, y, X_test)
+
+# what are scores for the features
+for i in range(len(fs.scores_)):
+    print('Feature %d: %f' % (i, fs.scores_[i]))
+    
+# plot the scores
+plt.bar([i for i in range(len(fs.scores_))], fs.scores_)
+plt.show()
+```
+
+```{python}
+fs.scores_
+fs.scores_ = pd.Series(fs.scores_)
+fs.scores_.index = X.columns
+fs.scores_.sort_values(ascending=False)
+```
+
+```{python}
+fs.scores_.sort_values(ascending=False).plot.bar(figsize=(15,5))
+```
+
+```{python}
+fs.scores_sort = fs.scores_.sort_values(ascending=False)
+```
+
+```{python}
+# save the info
+fr_final_dict = {
+    "k": None,
+    "columns": fs.scores_sort.index.tolist(),
+    "importances": fs.scores_sort.values.tolist(),
+}
+
+with open(fs_rf_path + "f_regression.json", "w") as fp:
+    json.dump(fr_final_dict, fp) 
+```
+
+### Feature selection with Sequential Feature Selection method
+
+
+### 1. Forward Elimination method
+
+```{python}
+from sklearn.feature_selection import SequentialFeatureSelector as SFS
+from sklearn.neighbors import KNeighborsClassifier
+```
+
+```{python}
+model = KNeighborsClassifier(n_neighbors=10)
+
+# Using Forward Elimination
+sfs = SFS(model, 
+         n_features_to_select = 10,
+         direction = 'forward',
+         scoring = 'accuracy',
+         n_jobs = -1,
+         cv=5)
+
+sfs = sfs.fit(X, y)
+```
+
+```{python}
+np.arange(X.shape[1])[sfs.support_]
+```
+
+```{python}
+selected_feat_fw = X.columns[(sfs.support_)]
+selected_feat_fw
+```
+
+```{python}
+# save the info
+fw_final_dict = {
+    "k": 10,
+    "columns": selected_feat_fw.tolist(),
+    "importances": None,
+}
+
+with open(fs_rf_path + "forward_elimination.json", "w") as fp:
+    json.dump(fw_final_dict, fp) 
+```
+
+### 2. Backward Elimination method
+
+```{python}
+from sklearn.preprocessing import StandardScaler
+```
+
+```{python}
+sc = StandardScaler()
+X_std = sc.fit_transform(X)
+X_test_std = sc.transform(X_test)
+```
+
+```{python}
+model.fit(X_std, y)
+
+print('Training accuracy:', np.mean(model.predict(X_std) == y)*100)
+print('Test accuracy:', np.mean(model.predict(X_test_std) == y_test)*100)
+```
+
+```{python}
+X_test.head()
+```
+
+```{python}
+# Using backward Elimination
+sfs_backward = SFS(model, 
+         n_features_to_select = 10,
+         direction = 'backward',
+         scoring = 'accuracy',
+         n_jobs = -1,
+         cv=5)
+
+sfs_backward = sfs_backward.fit(X, y)
+```
 
 # Fadi Methods
 

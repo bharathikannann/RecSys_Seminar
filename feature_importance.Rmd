@@ -374,9 +374,9 @@ from sklearn.datasets import load_digits
 from sklearn.feature_selection import RFE
 import matplotlib.pyplot as plt
 
-X = pd.DataFrame(X[['timestamp', 'occupation', 'last_watched']])[:10]
-y = y[:10]
-k = 2
+# X = pd.DataFrame(X[['timestamp', 'occupation', 'last_watched']])[:10]
+# y = y[:10]
+
 ```
 
 ```{python}
@@ -398,11 +398,9 @@ with open(fs_path + "rfe-svc_" + k + ".json", "w") as fp:
 ```
 
 ```{python}
-X
-```
-
-```{python}
 from sklearn.feature_selection import SelectKBest, f_classif, chi2, f_regression, mutual_info_regression, r_regression
+
+k = 10
 
 score_funcs = {
     'f-classif': f_classif,

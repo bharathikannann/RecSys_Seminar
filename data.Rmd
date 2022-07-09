@@ -138,7 +138,7 @@ df['fm_release_date'] = df['release_date']
 
 ```{python}
 # fit one-hot-encoders before train/test split
-ohe_columns = ["movie_id", "user_id", "fm_timestamp", "fm_release_date", "zip_code", "fm_age", "occupation", "movie_id"]
+ohe_columns = ["movie_id", "user_id", "fm_timestamp", "fm_release_date", "zip_code", "fm_age", "occupation"]
 ohe_encoders = []
 for col in ohe_columns:
     encoder = OneHotEncoder(dtype=int, sparse=False)
@@ -176,20 +176,20 @@ del(df)
   - last_watched
 
 ```{python}
-# get last watched movie
-def get_last_watched(df):
-    df.sort_values(['user_id', 'timestamp'], inplace=True)
-    # shift the values in movie_id col down by one
-    df['last_watched'] = df['movie_id'].shift(1)
-    # then set the first value (first movie watched by the user) to 0
-    for index, user in users.iterrows():
-        idx = df[df['user_id'] == user['user_id']].index[0]
-        df.at[idx, 'last_watched'] = df.at[idx, 'movie_id']
+# # get last watched movie
+# def get_last_watched(df):
+#     df.sort_values(['user_id', 'timestamp'], inplace=True)
+#     # shift the values in movie_id col down by one
+#     df['last_watched'] = df['movie_id'].shift(1)
+#     # then set the first value (first movie watched by the user) to 0
+#     for index, user in users.iterrows():
+#         idx = df[df['user_id'] == user['user_id']].index[0]
+#         df.at[idx, 'last_watched'] = df.at[idx, 'movie_id']
 ```
 
 ```{python}
-for df in [df_train, df_test]:
-    get_last_watched(df)
+# for df in [df_train, df_test]:
+#     get_last_watched(df)
 ```
 
 ```{python}
@@ -242,19 +242,19 @@ rf_df_test = df_test.copy(deep=True)
   - TODO: binary encoding last_watched, maybe?
 
 ```{python}
-ohe_columns[-1] = "last_watched"
-ohe_encoders[-1].feature_names_in_ = [ohe_columns[-1]]
+# ohe_columns[-1] = "last_watched"
+# ohe_encoders[-1].feature_names_in_ = [ohe_columns[-1]]
 ```
 
 ```{python}
-# add mean_rate and cum_mean_rate to encoder
-for col in ['mean_rate', 'cum_mean_rate']:
-    df_train[col] = df_train[col].apply(lambda rate: int(round(rate, 1)*10))
-    df_test[col] = df_test[col].apply(lambda rate: int(round(rate, 1)*10))
-    ohe_columns.append(col)
-    encoder = OneHotEncoder(categories=[[i for i in range(10,51,1)]], dtype=int, sparse=False)
-    encoder.fit(df_train[[col]])
-    ohe_encoders.append(encoder)
+# # add mean_rate and cum_mean_rate to encoder
+# for col in ['mean_rate', 'cum_mean_rate']:
+#     df_train[col] = df_train[col].apply(lambda rate: int(round(rate, 1)*10))
+#     df_test[col] = df_test[col].apply(lambda rate: int(round(rate, 1)*10))
+#     ohe_columns.append(col)
+#     encoder = OneHotEncoder(categories=[[i for i in range(10,51,1)]], dtype=int, sparse=False)
+#     encoder.fit(df_train[[col]])
+#     ohe_encoders.append(encoder)
 ```
 
 ```{python}
@@ -274,7 +274,7 @@ def encode_df(df, col_len, ohe_cols, ohe_encoders):
     df_final = pd.concat([df_final, df[genre_cols]], axis = 1)
 
     # columns that don't need ohe
-    non_ohe_columns = ["sex", "mean_rate", "cum_mean_rate"]
+    non_ohe_columns = ["sex", "cum_mean_rate", 'mean_rate']
     for col in non_ohe_columns:
         col_len[col] = 1
     df_final = pd.concat([df_final, df[non_ohe_columns]], axis = 1)
@@ -294,6 +294,16 @@ df_train.reset_index(inplace=True)
 
 df_test = encode_df(df_test, col_len, ohe_columns, ohe_encoders)
 df_train = encode_df(df_train, col_len, ohe_columns, ohe_encoders)
+```
+
+```{python}
+# df_train.to_csv('dataset/New folder/train.csv', index = False, header=True)
+# df_test.to_csv('dataset/New folder/test.csv', index = False, header=True)
+```
+
+```{python}
+# temp = pd.read_csv('dataset/New folder/train.csv')
+# temp.head()
 ```
 
 ```{python}
@@ -338,7 +348,7 @@ del(rf_df_test)
 # converting objects to integers, since scikit learn supports only numerical values
 le = preprocessing.LabelEncoder()
 
-label_encoding_columns = ['occupation','zip_code','sex']
+label_encoding_columns = ['sex']
 for col in label_encoding_columns:
     df_train[col] = le.fit_transform(df_train[col])
     df_test[col] = le.fit_transform(df_test[col])    
@@ -351,5 +361,13 @@ os.makedirs(rf_export_path, exist_ok=True)
 # Saving the RF data
 pickle.dump(df_train, open(rf_export_path + train_set_filename, 'wb'))
 pickle.dump(df_test, open(rf_export_path + test_set_filename, 'wb'))
+
+```
+
+```{python}
+
+```
+
+```{python}
 
 ```

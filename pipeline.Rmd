@@ -23,21 +23,10 @@ from os.path import exists
 import pickle
 import numpy as np
 from collections import OrderedDict
+import matplotlib.pyplot as plt
+import re
 
 from myfm import MyFMRegressor
-# from myfm.utils.callbacks import RegressionCallback
-
-# class MyRegressionCallback(RegressionCallback):
-#     def __call__(self, i, fm, hyper, history):
-#         should_stop, description = super(MyRegressionCallback, self).__call__(i, fm, hyper, history)
-#         trace_result = self.result_trace[-1]
-#         if len(self.result_trace) > 8:
-#             for index in range(8):
-#                 old_trace_result = self.result_trace[-(index + 1)]
-#                 if abs(old_trace_result['rmse'] - trace_result['rmse']) > 0.0001:
-#                     return (should_stop, description)
-#             return (True, description)
-#         return (should_stop, description)
 ```
 
 ```{python}
@@ -46,6 +35,7 @@ config = ConfigParser()
 config.read("config.ini")
 dataset_info = config["DATASETS"]
 fm_data_path = dataset_info['fm_path']
+fm_data_path_new = dataset_info['fm_path_new']
 rf_data_path = dataset_info['rf_path']
 train_set_filename = dataset_info['train_filename']
 test_set_filename = dataset_info['test_filename']
@@ -58,13 +48,14 @@ rf_filename = model_info['rf_model_filename']
 
 fs_info = config['FEATURE_SELECTION']
 fs_path = fs_info['fs_rf_path']
+fs_final_path = fs_info['fs_final_path']
 ```
 
 ### FM Training and Testing
 
 ```{python}
-train = pickle.load(open(fm_data_path + train_set_filename, 'rb'))
-test = pickle.load(open(fm_data_path + test_set_filename, 'rb'))
+train = pickle.load(open(fm_data_path_new + train_set_filename, 'rb'))
+test = pickle.load(open(fm_data_path_new + test_set_filename, 'rb'))
 X_train = train.drop(['rating'], axis=1)
 X_test = test.drop(['rating'], axis=1)
 y_train = train['rating']
@@ -76,6 +67,18 @@ with open(fm_data_path + description_filename) as f:
     group_shapes = [v for k,v in meta_data.items()]
 ```
 
+# Baseline Model
+
+```{python}
+fm = MyFMRegressor(rank=10, random_seed = 332)
+fm.fit(X_train, y_train, n_iter=200, n_kept_samples=200)
+
+prediction = fm.predict(X_test)
+rmse = ((y_test - prediction) ** 2).mean() ** .5
+mae = np.abs(y_test - prediction).mean()
+print(f'rmse={rmse}, mae={mae}')
+```
+
 ---
 
 
@@ -84,9 +87,10 @@ with open(fm_data_path + description_filename) as f:
 ```{python}
 # Getting all the methods we have implemeted, file name represents the method name we have immplemented
 available_methods_rf = []
-for subdir, dirs, files in os.walk(fs_path):
-    for file in files:
-        available_methods_rf.append(file[:-5])
+for subdir, dirs, files in os.walk(fs_final_path):
+    if len(dirs) == 1:
+        for file in files:
+            available_methods_rf.append(file[:-5])
 pd.DataFrame(available_methods_rf)
 ```
 
@@ -102,7 +106,7 @@ selected_col_dict_rf.keys()
 ```{python}
 # Storing corresponding json data in the key.
 for i in range(len(available_methods_rf)):
-    f = open(fs_path + available_methods_rf[i] + ".json")
+    f = open(fs_final_path + available_methods_rf[i] + ".json")
     selected_col_dict_rf[available_methods_rf[i]] = json.load(f)
 ```
 
@@ -111,14 +115,50 @@ path = dataset_info['ori_path']
 genre_cols = pd.read_csv(path + 'ml-100k/u.genre', sep='|', header=None)[0].to_numpy().tolist()
 ```
 
-# Convert the columns obtained from rf dataset methods to fm dataset
+```{python}
+# # choose the method
+# choose_method = 4
+# sel_from_model_col_rf = selected_col_dict_rf[available_methods_rf[choose_method]]["columns"].copy()
+# available_methods_rf[choose_method]
+```
+
+# Training MyFM model
+
+
+## Select from model
 
 ```{python}
-def covert_rf_to_fm(x_col_rf, X_train, genre_cols):
+path = 'feature_selection/final/f-classif/'
+
+# Getting all the methods we have implemeted, file name represents the method name we have immplemented
+available_methods_sfm = []
+for subdir, dirs, files in os.walk(path):
+    for file in files:
+        available_methods_sfm.append(file[:-5])
+pd.DataFrame(available_methods_sfm)
+```
+
+```{python}
+# Storing corresponding json data in the key.
+select_from_model_dict = {}
+for i in range(len(available_methods_sfm)):
+    f = open(path + available_methods_sfm[i] + ".json")
+    select_from_model_dict[available_methods_sfm[i]] = json.load(f)
+```
+
+```{python}
+for i in range(1,len(select_from_model_dict)):
+    temp = "f-classif_" + str(i*50)
+    select_from_model_dict[temp]['columns'][::-1]
+```
+
+```{python}
+def covert_fs_to_fm(cols, X_fm, genre_cols):
     
     '''
     Convert the columns obtained from rf dataset methods to fm dataset
-    * x_cols_rf - the selected columns by the  method
+    * cols - all the selected columns
+    * X_fm - all the myfm data
     * genre_cols - The total genre list. Used to group them in group shapes.
                    Every genre is a different feaure in random forest. but in MyFM 
                    all the genre should be combined into a single key.
@@ -127,188 +167,155 @@ def covert_rf_to_fm(x_col_rf, X_train, genre_cols):
     
     # --------------------------------------------------------
     # Preprocessing columns
-    # --------------------------------------------------------
-    # Timestamp and release date columns have extra 'fm' character before. 
-    # For conversion of rf columns to fm columns, names are changed
-    for col in ['timestamp', 'release_date', 'age']:
-        if col in x_col_rf:
-            x_col_rf.remove(col)
-            x_col_rf.append('fm_' + col)
+    # -------------------------------------------X_train_temp_fs-------------
+    group_shapes = OrderedDict()
+     
+    X_train_temp_fs = pd.concat([X_fm.filter(regex = 'user_id'), X_fm.filter(regex = 'movie_id')], axis = 1)
+    group_shapes['user_id'] = 943
+    group_shapes['movie_id_id'] = 1681
+    
+    X_temp = X_fm[cols]
+    X_temp_cols = X_temp.columns
+    
+    
+    for i in ['timestamp','release_date','age','sex','occupation','zip_code']:
+        if len(X_temp.filter(regex = i).columns):
+            X_train_temp_fs = pd.concat([X_train_temp_fs, X_temp.filter(regex = i)], axis = 1)
+            group_shapes[i] = len(X_temp.filter(regex = i).columns)
 
-    # Adding movie_id and user_id columns if not present
-    for col in ['movie_id', 'user_id']:
-        if col not in x_col_rf:
-            x_col_rf.append(col)
+    if list(set(X_temp_cols) & set(genre_cols)):
+        group_shapes['genre'] = 0
+        for col in list(set(X_temp_cols) & set(genre_cols)):
+            temp = X_temp.filter(regex=col, axis=1)
+            X_train_temp_fs = pd.concat([X_train_temp_fs, temp], axis = 1)
+            group_shapes['genre'] = group_shapes['genre'] + 1 
     
-    # --------------------------------------------------------
-    # Creating dataset and metadata
-    # --------------------------------------------------------
-    meta_data_rf = OrderedDict()
-    X_train_rf = pd.DataFrame([])
-    
-    # Convert only the column's present in the selected method
-    for col in x_col_rf:
-        # For all normal ohe columns
-        if col in ['movie_id','user_id','fm_timestamp','fm_release_date','zip_code','fm_age','occupation','last_watched','sex','age']:
-            # Filter method filters columns which contains the regex argument
-            temp = X_train.filter(regex=col, axis=1)
-            X_train_rf = pd.concat([X_train_rf, temp], axis = 1)
-            meta_data_rf[col] = temp.shape[1]
-    
-    # Processing mean and cummulative mean rating
-    # --------------------------------------------------------
-    # For mean rating, it has the same characters with cum_mean_rate and has no unique words
-    # So these columns are processed separately. It is done at last to not make any confusion :)
-    # if both are present
-    if 'mean_rate' and 'cum_mean_rate' in x_col_rf:
-        # a is union, has both mean and cum_mean_rate because of regex
-        # b has only cum_mean_rating
-        a = X_train.filter(regex='mean_rate', axis=1)
-        b = X_train.filter(regex='cum_mean_rate', axis=1)
-        # Taking intersection with a and b gives cum_mean_rate and its negation will give mean_rate
-        # cum_mean_rating will be NAN and droppped
-        a = a[~a.isin(b)].dropna(axis=1)
-        X_train_rf = pd.concat([X_train_rf, a], axis = 1)
-        X_train_rf = pd.concat([X_train_rf, b], axis = 1)
-        meta_data_rf['mean_rate'] = a.shape[1]
-        meta_data_rf['cum_mean_rate'] = b.shape[1]
-        
-    # If atleast 1 is present, There will be no clash so processed normally
-    else:
-        for col in x_col_rf:
-            if col in ['mean_rate','cum_mean_rate']:
-                temp = X_train.filter(regex=col, axis=1)
-                X_train_rf = pd.concat([X_train_rf, temp], axis = 1)
-                meta_data_rf[col] = temp.shape[1]
-    
-    # Processing genre
-    # --------------------------------------------------------
-    # Genre is combined into a single key in group shapes
-    # If there are any genre columns in x_col_rf
-    if list(set(genre_cols) & set(x_col_rf)):
-        meta_data_rf['genre'] = 0
-        # For all the genre in x_col_rf
-        for col in list(set(genre_cols) & set(x_col_rf)):
-            temp = X_train.filter(regex=col, axis=1)
-            X_train_rf = pd.concat([X_train_rf, temp], axis = 1)
-            meta_data_rf['genre'] = meta_data_rf['genre'] + 1 
-            
-    return X_train_rf, meta_data_rf
+    group_shapes_list = [j for i,j in group_shapes.items()]
+    return X_train_temp_fs, group_shapes, group_shapes_list
 ```
 
-# Select from Model Dataset
-
-
-### Choosing the method for current evaluation
-
-> **Important - Need to change the name of the selected columns (sel_from_model_col_rf) for everymethod and also chosse the corresponding method id**
-
 ```{python}
-# The index in the available methods list represents the model we are choosing now
-# 3 - select-from-model method
-choose_method = 3
-
-# get features for the method
-sel_from_model_col_rf = selected_col_dict_rf[available_methods_rf[choose_method]]["columns"]
-
-# convert the dateset
-X_train_sel_from_model, meta_data_sel_from_model = covert_rf_to_fm(sel_from_model_col_rf, X_train, genre_cols)
-X_test_sel_from_model, meta_data_sel_from_model = covert_rf_to_fm(sel_from_model_col_rf, X_test, genre_cols)
-
-# Convert metadata to list
-meta_data_sel_from_model_list = [j for i,j in meta_data_sel_from_model.items()]
-
-meta_data_sel_from_model
+sel_from_model_col_rf = select_from_model_dict["f-classif_" + str(8*50)]['columns'][::-1]
+X_train_t, group_shapes_dict, group_shapes = covert_fs_to_fm(sel_from_model_col_rf, X_train, genre_cols)
+X_train_t.shape
 ```
 
-# Random forest Dataset
-- Top N features are picked. N - hyperparameter 
+```{python}
+rmse_results = []
+
+X_train_temp = pd.concat([X_train.filter(regex = 'user_id'), X_train.filter(regex = 'movie_id')], axis = 1)
+X_test_temp = pd.concat([X_test.filter(regex = 'user_id'), X_test.filter(regex = 'movie_id')], axis = 1)
+
+for i in range(10,11):
+
+    sel_from_model_col_rf = select_from_model_dict["f-classif_" + str(i*50)]['columns'][::-1]
+    
+    X_train_final, group_shapes_dict, group_shapes = covert_fs_to_fm(sel_from_model_col_rf, X_train, genre_cols)
+    X_test_final, group_shapes_dict, group_shapes = covert_fs_to_fm(sel_from_model_col_rf, X_test, genre_cols)
+
+    print(X_train_final.shape)
+    fm = MyFMRegressor(rank=10, random_seed = 332)
+    fm.fit(X_train_final, y_train, n_iter=200, n_kept_samples=200, group_shapes = group_shapes)
+
+    prediction = fm.predict(X_test_final)
+    rmse = ((y_test - prediction) ** 2).mean() ** .5
+    mae = np.abs(y_test - prediction).mean()
+    print(f'rmse={rmse}, mae={mae}')
+    rmse_results.append(rmse)
+    del(fm)
+```
+
+## Tree based methods
 
 ```{python}
+# choose the method
+choose_method = 0
+sel_from_model_col_rf = selected_col_dict_rf[available_methods_rf[choose_method]]["columns"].copy()
+```
+
+```{python}
+len(sel_from_model_col_rf)
+```
+
+```{python}
+available_methods_rf[choose_method]
+```
+
+```{python}
+rmse_results = []
+
+# choose the method
 choose_method = 2
+sel_from_model_col_rf = selected_col_dict_rf[available_methods_rf[choose_method]]["columns"].copy()
+print(available_methods_rf[choose_method])
 
-# No of top N features to get
-get_top_N_fetaures = 10
+X_train_temp = pd.concat([X_train.filter(regex = 'user_id'), X_train.filter(regex = 'movie_id')], axis = 1)
+X_test_temp = pd.concat([X_test.filter(regex = 'user_id'), X_test.filter(regex = 'movie_id')], axis = 1)
 
-# get features for the method
-random_forest_col_rf = selected_col_dict_rf[available_methods_rf[choose_method]]["columns"]
+for k in [len(sel_from_model_col_rf)]:
 
-# convert the dataset
-X_train_random_forest, meta_data_random_forest = covert_rf_to_fm(random_forest_col_rf[:get_top_N_fetaures], X_train, genre_cols)
-X_test_random_forest, meta_data_random_forest = covert_rf_to_fm(random_forest_col_rf[:get_top_N_fetaures], X_test, genre_cols)
+    X_train_final, group_shapes_dict, group_shapes = covert_fs_to_fm(sel_from_model_col_rf[:k], X_train, genre_cols)
+    X_test_final, group_shapes_dict, group_shapes = covert_fs_to_fm(sel_from_model_col_rf[:k], X_test, genre_cols)
 
-# Convert metadata to list
-meta_data_random_forest_list = [j for i,j in meta_data_random_forest.items()]
+    print(X_train_final.shape)
+    fm = MyFMRegressor(rank=10, random_seed = 332)
+    fm.fit(X_train_final, y_train, n_iter=200, n_kept_samples=200)
 
-meta_data_random_forest
+    prediction = fm.predict(X_test_final)
+    rmse = ((y_test - prediction) ** 2).mean() ** .5
+    mae = np.abs(y_test - prediction).mean()
+    print(f'rmse={rmse}, mae={mae}')
+    rmse_results.append(rmse)
 ```
 
----
+# Save and plot model
 
 ```{python}
-# callback = MyRegressionCallback(5, X_test, y_test.values)
-
-# create parent folder if doesn't exist
-os.makedirs(model_path, exist_ok=True)
-
-# load from pickle dump, if it exists. Otherwise train model and then save/'pickle' it
-fm_model_path = model_path + fm_filename
-if exists(fm_model_path):
-    fm = pickle.load(open(fm_model_path, 'rb'))
-else:
-    fm = MyFMRegressor(rank=1).fit(X_train_random_forest, y_train, n_iter=300, group_shapes=group_shapes)
-    pickle.dump(fm, open(fm_model_path, 'wb'))
-
-fm_error = metrics.mean_squared_error(y_test, fm.predict(X_test), squared=False)
-print(f'FM Regression error: {fm_error}')
-```
-
-### RF Training and Testing
-
-```{python}
-train = pickle.load(open(rf_data_path + train_set_filename, 'rb'))
-test = pickle.load(open(rf_data_path + test_set_filename, 'rb'))
-# train = pd.read_csv(rf_data_path + train_set_filename, sep=',', encoding='latin-1', index_col=None, nrows=1000)
-# test = pd.read_csv(rf_data_path + test_set_filename, sep=',', encoding='latin-1', index_col=None, nrows=1000)
-X_train = train.drop(['rating'], axis=1)
-X_test = test.drop(['rating'], axis=1)
-y_train = train['rating']
-y_test = test['rating']
+rmse_results_copy = rmse_results.copy()
+rmse_results.insert(0,0)
 ```
 
 ```{python}
-rf_model_path = model_path + rf_filename
-if exists(rf_model_path):
-    rf = pickle.load(open(rf_model_path, 'rb'))
-else:
-    rf = RandomForestRegressor(n_estimators = 100, random_state = 42).fit(X_train, y_train)
-    pickle.dump(rf, open(rf_model_path, 'wb'))
-
-rf_error = metrics.mean_squared_error(y_test, rf.predict(X_test), squared=False)
-print(f'Random Forest error: {rf_error}')
-
+# df = pd.read_csv("feature_selection/final_results/extra_tree_classifier_improved.csv", header = None, names=['extra_tree_classifier'])
+# df['permutation_importance'] = pd.read_csv("feature_selection/final_results/permutation_importance_improved.csv", header = None)
+# df["random_forest"] = pd.read_csv("feature_selection/final_results/random_forest_improved.csv", header = None)
+# df["select_from_model"] = pd.read_csv("feature_selection/final_results/select_from_model_improved.csv", header = None)
+# df["classif"] = pd.read_csv("feature_selection/final_results/f-classif.csv", header = None)
+# df["chi2"] = pd.read_csv("feature_selection/final_results/chi2.csv", header = None)
+# df["mutual_importance_regression"] = pd.read_csv("feature_selection/final_results/mutual_importance_regression.csv", header = None)
+# df["recursive_feature_elimination"] = pd.read_csv("feature_selection/final_results/recursive_feature_elimination.csv", header = None)
 ```
 
-### RF Feature Importance
+```{python}
+colors = ['olive','b','c','m','y','brown','r','g']
+plt.figure(figsize=(12,6))
+plt.ylim(0.85,0.93)
+plt.xlim(550,-50)
+for c, i in enumerate(range(len(df.columns))):
+    plt.plot([0,50,100,150,200,250,300,350,400,450,500,524], rmse_results.iloc[:,i].values[1:], color = colors[i], label = df.iloc[:,i].name, linestyle = '--', marker = '*')
+plt.xlabel("No of Additional Parameters")
+plt.ylabel("Validation RMSE")
+plt.legend(bbox_to_anchor=(1.31,1))
+plt.show()
+```
 
 ```{python}
-import matplotlib.pyplot as plt
+np.savetxt("feature_selection/final_results/f-classif.csv", 
+           rmse_results,
+           delimiter =", ", 
+           fmt ='% s')
+```
 
-# list of column names
-feature_names = list(X_train.columns)
+# Baseline
 
-# extract the feature importance values
-std = np.std([tree.feature_importances_ for tree in rf.estimators_], axis=0)
-rf_feature_importances = pd.DataFrame(
-    {"feature": feature_names, "importance": rf.feature_importances_}
-)
+```{python}
+fm = MyFMRegressor(rank=10)
+fm.fit(X_train, y_train, n_iter=200, group_shapes=group_shapes, n_kept_samples=200)
+```
 
-rf_feature_importances.sort_values("importance", ascending=False,inplace=True)
-
-# visualize the importance of each feature
-fig, ax = plt.subplots(figsize=(12,6))
-rf_feature_importances.plot.bar(x='feature', y='importance', yerr=std, ax=ax, legend=False)
-ax.set_title("Feature importances")
-ax.set_ylabel("Mean decrease in impurity")
-fig.tight_layout()
+```{python}
+prediction = fm.predict(X_test)
+rmse = ((y_test - prediction) ** 2).mean() ** .5
+mae = np.abs(y_test - prediction).mean()
+print(f'rmse={rmse}, mae={mae}')
 ```

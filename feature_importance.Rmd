@@ -46,6 +46,7 @@ rf_filename = model_info['rf_model_filename']
 fs_info = config["FEATURE_SELECTION"]
 fs_fm_path = fs_info['fs_fm_path']
 fs_rf_path = fs_info['fs_rf_path']
+fs_final_path = fs_info['fs_final_path']
 
 path = dataset_info['ori_path']
 genre_cols = pd.read_csv(path + 'ml-100k/u.genre', sep='|', header=None)[0].to_numpy().tolist()
@@ -86,7 +87,7 @@ test = pickle.load(open(fm_data_path + test_set_filename, 'rb'))
 ## Training data
 
 ```{python}
-X = train.drop((['rating']), axis = 1)
+X = train.drop((['rating','cum_mean_rate','mean_rate']), axis = 1)
 y = train['rating']
 ```
 
@@ -98,7 +99,7 @@ X_original = X.copy(deep = True)
 ## Test data
 
 ```{python}
-X_test = test.drop((['rating']), axis = 1)
+X_test = test.drop((['rating','cum_mean_rate','mean_rate']), axis = 1)
 y_test = test['rating']
 ```
 
@@ -108,37 +109,11 @@ y_test = test['rating']
 ```{python}
 X.drop(X.filter(regex='movie_id').columns, axis=1, inplace=True)
 X.drop(X.filter(regex='user_id').columns, axis=1, inplace=True)
-# X.drop(X.filter(regex='user_id').columns, axis=1, inplace=True)
 ```
 
 ```{python}
 X_test.drop(X_test.filter(regex='movie_id').columns, axis=1, inplace=True)
 X_test.drop(X_test.filter(regex='user_id').columns, axis=1, inplace=True)
-```
-
-Experimenting with one hot encoding occupation to see if performance increases. 
-It was the same and this code is just for reference. Will be removed at the end. 
-
-Standardizing the dataset to see if performance increases
-
-```{python}
-from sklearn.preprocessing import StandardScaler
-X = StandardScaler().fit_transform(X)
-X_test = StandardScaler().fit_transform(X_test)
-```
-
-```{python}
-X_ohe_occupation = X.copy(deep=True)
-dummies = pd.get_dummies(X_ohe_occupation['occupation'])
-X_ohe_occupation.drop('occupation', axis = 1, inplace=True)
-X_ohe_occupation = pd.concat([X_ohe_occupation, dummies], axis = 1)
-```
-
-```{python}
-X_test_ohe_occupation = X_test.copy(deep=True)
-dummies = pd.get_dummies(X_test_ohe_occupation['occupation'])
-X_test_ohe_occupation.drop('occupation', axis = 1, inplace=True)
-X_test_ohe_occupation = pd.concat([X_test_ohe_occupation, dummies], axis = 1)
 ```
 
 ---
@@ -182,19 +157,15 @@ rf_feature_importances = pd.DataFrame(
 ```
 
 ```{python}
+rf_feature_importances.sort_values("importance", ascending=False,inplace=True)
+```
+
+```{python}
 # giving colors for all genre for better visualization, optional
 # my_colors = ['blue','green']
 # my_colors.extend(['orange']*19)
 # my_colors.extend(['brown','pink','gray','olive','cyan','aquamarine','gold','gold'])
 # feature_importances_df['info'] = my_colors
-```
-
-```{python}
-rf_feature_importances.sort_values("importance", ascending=False,inplace=True)
-```
-
-```{python}
-rf_feature_importances[rf_feature_importances['importance']  > 0.0005]
 ```
 
 ```{python}
@@ -205,34 +176,34 @@ rf_feature_importances[rf_feature_importances['importance']  > 0.0005]
 ```{python}
 rf_final_dict = {
     "k": None,
-    "columns": rf_feature_importances['feature'][:1000].tolist(),
-    "importances": rf_feature_importances['importance'][:1000].tolist(),
+    "columns": rf_feature_importances['feature'].tolist(),
+    "importances": rf_feature_importances['importance'].tolist(),
 }
 ```
 
 ```{python}
-with open(fs_fm_path + "random-forest-feature-importance.json", "w") as fp:
+with open(fs_final_path + "random-forest-feature-importance_v3.json", "w") as fp:
     json.dump(rf_final_dict, fp) 
 ```
 
 ```{python}
-# Get the sum of all importances
-s = 0
-for i in rf_feature_importances['feature']:
-    if i in genre_cols:
-        s = s + rf_feature_importances[rf_feature_importances['feature'] == i]['importance'].values[0]
+# # Get the sum of all importances
+# s = 0
+# for i in rf_feature_importances['feature']:
+#     if i in genre_cols:
+#         s = s + rf_feature_importances[rf_feature_importances['feature'] == i]['importance'].values[0]
 ```
 
 ```{python}
-rf_feature_importances_modified_genre = rf_feature_importances.copy(deep=True)
-# modifying index to locate easily
-rf_feature_importances_modified_genre.index = rf_feature_importances_modified_genre['feature']
-# Dropping all genre columns
-rf_feature_importances_modified_genre.drop(genre_cols, inplace = True, axis = 0)
-# Adding the combined genre column
-rf_feature_importances_modified_genre.loc['genre'] = ['genre',s]
-# Sorting again
-rf_feature_importances_modified_genre.sort_values("importance", ascending=False,inplace=True)
+# rf_feature_importances_modified_genre = rf_feature_importances.copy(deep=True)
+# # modifying index to locate easily
+# rf_feature_importances_modified_genre.index = rf_feature_importances_modified_genre['feature']
+# # Dropping all genre columns
+# rf_feature_importances_modified_genre.drop(genre_cols, inplace = True, axis = 0)
+# # Adding the combined genre column
+# rf_feature_importances_modified_genre.loc['genre'] = ['genre',s]
+# # Sorting again
+# rf_feature_importances_modified_genre.sort_values("importance", ascending=False,inplace=True)
 ```
 
 ```{python}
@@ -247,14 +218,14 @@ fig.tight_layout()
 ```
 
 ```{python}
-# Visualization is nice to have, but not necessary
-# visualize the importance of each feature, genre combined
-fig, ax = plt.subplots(figsize=(5,6))
-# ax.set_ylim([0, 30])
-rf_feature_importances_modified_genre.plot.bar(x='feature', y='importance', ax=ax, legend=False, stacked = True)
-ax.set_title("Feature importances")
-ax.set_ylabel("Importance in %")
-fig.tight_layout()
+# # Visualization is nice to have, but not necessary
+# # visualize the importance of each feature, genre combined
+# fig, ax = plt.subplots(figsize=(5,6))
+# # ax.set_ylim([0, 30])
+# rf_feature_importances_modified_genre.plot.bar(x='feature', y='importance', ax=ax, legend=False, stacked = True)
+# ax.set_title("Feature importances")
+# ax.set_ylabel("Importance in %")
+# fig.tight_layout()
 ```
 
 ---
@@ -298,7 +269,7 @@ et_final_dict = {
     "importances": et_feature_importances['importance'].tolist(),
 }
 
-with open(fs_rf_path + "extra-tree-classifier-feature-importance.json", "w") as fp:
+with open(fs_final_path + "extra-tree-classifier-feature-importance.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 
@@ -324,11 +295,20 @@ ___
 from sklearn.inspection import permutation_importance
 start_time = time.time()
 result = permutation_importance(
-    forest, X, y, n_repeats=4
+    forest, X, y, n_repeats=1
 )
 elapsed_time = time.time() - start_time
 print(f"Elapsed time to compute the importances: {elapsed_time:.3f} seconds")
 
+forest_importances = pd.Series(result.importances_mean, index=feature_names)
+forest_importances.sort_values(ascending=False,inplace=True)
+```
+
+```{python}
+feature_names = list(X.columns)
+```
+
+```{python}
 forest_importances = pd.Series(result.importances_mean, index=feature_names)
 forest_importances.sort_values(ascending=False,inplace=True)
 ```
@@ -341,8 +321,12 @@ et_final_dict = {
     "importances": forest_importances.values.tolist(),
 }
 
-with open(fs_rf_path + "permutation_importance.json", "w") as fp:
+with open(fs_final_path + "permutation_importance.json", "w") as fp:
     json.dump(et_final_dict, fp) 
+```
+
+```{python}
+ forest_importances
 ```
 
 ```{python}
@@ -393,8 +377,30 @@ scaled = scaler.fit_transform(X)
 ```
 
 ```{python}
-sel_ = SelectFromModel(LogisticRegression(C=1, penalty='l2'))
-sel_.fit(scaled, y)
+for i in range(0 ,550, 50):
+    
+    sel_ = SelectFromModel(LogisticRegression(C=1, penalty='l2'), max_features = i)
+    sel_.fit(scaled, y)
+    
+    selected_feat = X.columns[(sel_.get_support())]
+    print('total no of features: {}'.format((X.shape[1])))
+    print('No of selected features: {}'.format(len(selected_feat)))
+    print('features with coefficients shrank to zero: {}'.format(
+    np.sum(sel_.estimator_.coef_ == 0)))
+    
+    # save the info
+    et_final_dict = {
+        "k": None,
+        "columns": selected_feat.tolist(),
+        "importances": None,
+    }
+
+    with open(fs_final_path + "/sfm/" + "select_from_model_" + str(i) + ".json", "w") as fp:
+        json.dump(et_final_dict, fp) 
+```
+
+```{python}
+
 ```
 
 ```{python}
@@ -417,7 +423,7 @@ et_final_dict = {
     "importances": None,
 }
 
-with open(fs_rf_path + "select_from_model.json", "w") as fp:
+with open(fs_final_path + "select_from_model_500.json", "w") as fp:
     json.dump(et_final_dict, fp) 
 ```
 

@@ -1,0 +1,449 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.13.8
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+# import libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pickle
+import time
+from configparser import ConfigParser
+import os
+import json
+
+from sklearn.metrics import accuracy_score, confusion_matrix
+```
+
+```{python}
+#Read config.ini file
+config = ConfigParser()
+config.read("config.ini")
+dataset_info = config["DATASETS"]
+fm_data_path = dataset_info['fm_path']
+rf_data_path = dataset_info['rf_path']
+train_set_filename = dataset_info['train_filename']
+test_set_filename = dataset_info['test_filename']
+description_filename = dataset_info['description_filename']
+
+model_info = config["MODELS"]
+model_path = model_info['model_path']
+fm_filename = model_info['fm_model_filename']
+rf_filename = model_info['rf_model_filename']
+
+fs_info = config["FEATURE_SELECTION"]
+fs_fm_path = fs_info['fs_fm_path']
+fs_rf_path = fs_info['fs_rf_path']
+fs_final_path = fs_info['fs_final_path']
+
+path = dataset_info['ori_path']
+genre_cols = pd.read_csv(path + 'ml-100k/u.genre', sep='|', header=None)[0].to_numpy().tolist()
+```
+
+> **_Important:_**  Create a new heading for the model, and also be unique with variable names.  
+
+### NOTES:
+- Save final outputs in this format: 
+    
+```python
+    x_final_dict = {
+        "k": None,
+        "columns": [], # list type
+        "importances": [], # list type, in percentage, and should be sorted
+    }
+```
+- x - your model name
+- columns length must be same as importances length
+- importances must be in descending order, and columns should follow accordingly
+- Remember to exclude all movie_id and user_id columns before doing feature selection (optional and experiment with this one)
+
+### Then follow this format to save dictionary to json
+
+- Follow filename format (pay attention to - and _): model-name_k.json
+    - k - if you have any k values or just model_name
+
+```{python}
+# create parent folder if doesn't exist
+os.makedirs(fs_rf_path, exist_ok=True)
+```
+
+```{python}
+train = pickle.load(open(fm_data_path + train_set_filename, 'rb'))
+test = pickle.load(open(fm_data_path + test_set_filename, 'rb'))
+```
+
+## Training data
+
+```{python}
+X = train.drop((['rating','cum_mean_rate','mean_rate']), axis = 1)
+y = train['rating']
+```
+
+```{python}
+# Save for later reference, can be removed after all experiments
+X_original = X.copy(deep = True)
+```
+
+## Test data
+
+```{python}
+X_test = test.drop((['rating','cum_mean_rate','mean_rate']), axis = 1)
+y_test = test['rating']
+```
+
+---
+## FM Experiments
+
+```{python}
+X.drop(X.filter(regex='movie_id').columns, axis=1, inplace=True)
+X.drop(X.filter(regex='user_id').columns, axis=1, inplace=True)
+```
+
+```{python}
+X_test.drop(X_test.filter(regex='movie_id').columns, axis=1, inplace=True)
+X_test.drop(X_test.filter(regex='user_id').columns, axis=1, inplace=True)
+```
+
+---
+# 1. Feature Importance
+# 1.1 Feature importance using Random Forest
+
+```{python}
+from sklearn.ensemble import RandomForestClassifier
+```
+
+```{python}
+# initialize and fit the model
+forest = RandomForestClassifier(n_estimators=100)
+forest.fit(X, y)
+```
+
+### Testing the model
+
+```{python}
+y_pred = forest.predict(X_test)
+accuracy_score(y_test, y_pred) * 100
+# confusion_matrix(y_test, y_pred)
+```
+
+```{python}
+from sklearn import metrics
+print('Mean Absolute Error:', metrics.mean_absolute_error(y_test, y_pred))  
+print('Mean Squared Error:', metrics.mean_squared_error(y_test, y_pred))  
+print('Root Mean Squared Error:', np.sqrt(metrics.mean_squared_error(y_test, y_pred)))
+```
+
+```{python}
+# list of column names
+feature_names = list(X.columns)
+
+# extract the feature importance values
+std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
+rf_feature_importances = pd.DataFrame(
+    {"feature": feature_names, "importance": forest.feature_importances_}
+)
+```
+
+```{python}
+rf_feature_importances.sort_values("importance", ascending=False,inplace=True)
+```
+
+```{python}
+# giving colors for all genre for better visualization, optional
+# my_colors = ['blue','green']
+# my_colors.extend(['orange']*19)
+# my_colors.extend(['brown','pink','gray','olive','cyan','aquamarine','gold','gold'])
+# feature_importances_df['info'] = my_colors
+```
+
+```{python}
+# Converting the importances to percentage
+# rf_feature_importances['importance'] = rf_feature_importances['importance'] * 100
+```
+
+```{python}
+rf_final_dict = {
+    "k": None,
+    "columns": rf_feature_importances['feature'].tolist(),
+    "importances": rf_feature_importances['importance'].tolist(),
+}
+```
+
+```{python}
+with open(fs_final_path + "random-forest-feature-importance_v3.json", "w") as fp:
+    json.dump(rf_final_dict, fp) 
+```
+
+```{python}
+# # Get the sum of all importances
+# s = 0
+# for i in rf_feature_importances['feature']:
+#     if i in genre_cols:
+#         s = s + rf_feature_importances[rf_feature_importances['feature'] == i]['importance'].values[0]
+```
+
+```{python}
+# rf_feature_importances_modified_genre = rf_feature_importances.copy(deep=True)
+# # modifying index to locate easily
+# rf_feature_importances_modified_genre.index = rf_feature_importances_modified_genre['feature']
+# # Dropping all genre columns
+# rf_feature_importances_modified_genre.drop(genre_cols, inplace = True, axis = 0)
+# # Adding the combined genre column
+# rf_feature_importances_modified_genre.loc['genre'] = ['genre',s]
+# # Sorting again
+# rf_feature_importances_modified_genre.sort_values("importance", ascending=False,inplace=True)
+```
+
+```{python}
+# Visualization is nice to have, but not necessary
+# visualize the importance of each feature
+fig, ax = plt.subplots(figsize=(12,6))
+# ax.set_ylim([0, 30])
+rf_feature_importances.plot.bar(x='feature', y='importance', ax=ax, legend=False, stacked = True)
+ax.set_title("Feature importances")
+ax.set_ylabel("Importance in %")
+fig.tight_layout()
+```
+
+```{python}
+# # Visualization is nice to have, but not necessary
+# # visualize the importance of each feature, genre combined
+# fig, ax = plt.subplots(figsize=(5,6))
+# # ax.set_ylim([0, 30])
+# rf_feature_importances_modified_genre.plot.bar(x='feature', y='importance', ax=ax, legend=False, stacked = True)
+# ax.set_title("Feature importances")
+# ax.set_ylabel("Importance in %")
+# fig.tight_layout()
+```
+
+---
+
+# 1. 2. Extra Tree Cassifier
+
+```{python}
+from sklearn.ensemble import ExtraTreesClassifier
+```
+```{python}
+extra_tree = ExtraTreesClassifier()
+extra_tree.fit(X,y)
+```
+
+```{python}
+# extract the feature importance values
+std = np.std([tree.feature_importances_ for tree in extra_tree.estimators_], axis=0)
+et_feature_importances = pd.DataFrame(
+    {"feature": feature_names, "importance": extra_tree.feature_importances_}
+)
+```
+
+```{python}
+et_feature_importances.sort_values("importance", ascending=False,inplace=True)
+```
+
+```{python}
+# visualize the importance of each feature
+fig, ax = plt.subplots(figsize=(12,6))
+et_feature_importances.plot.bar(x='feature', y='importance', yerr=std, ax=ax, legend=False)
+ax.set_title("Feature importances")
+ax.set_ylabel("Mean decrease in impurity")
+fig.tight_layout()
+```
+
+```{python}
+# save the info
+et_final_dict = {
+    "k": None,
+    "columns": et_feature_importances['feature'].tolist(),
+    "importances": et_feature_importances['importance'].tolist(),
+}
+
+with open(fs_final_path + "extra-tree-classifier-feature-importance.json", "w") as fp:
+    json.dump(et_final_dict, fp) 
+```
+
+Visualizing top 10 common features for random forest and extra trees
+
+```{python}
+common_imp_features = pd.merge(rf_feature_importances.iloc[:11], et_feature_importances.iloc[:11], how = 'inner', on = ['feature'])
+common_imp_features.rename(columns={'importance_x':'random_forest_importance','importance_y':'extra_tree_importance'}, inplace=True)
+```
+
+```{python}
+# visualize the importance of each feature
+common_imp_features.plot.bar(x='feature', y=['random_forest_importance','extra_tree_importance'], legend=True)
+```
+
+both trees almost gave the same important features. These are the top 10 important features for our dataset.
+
+
+___
+# 2. Permutation Importance
+
+```{python}
+from sklearn.inspection import permutation_importance
+start_time = time.time()
+result = permutation_importance(
+    forest, X, y, n_repeats=1
+)
+elapsed_time = time.time() - start_time
+print(f"Elapsed time to compute the importances: {elapsed_time:.3f} seconds")
+
+forest_importances = pd.Series(result.importances_mean, index=feature_names)
+forest_importances.sort_values(ascending=False,inplace=True)
+```
+
+```{python}
+feature_names = list(X.columns)
+```
+
+```{python}
+forest_importances = pd.Series(result.importances_mean, index=feature_names)
+forest_importances.sort_values(ascending=False,inplace=True)
+```
+
+```{python}
+# save the info
+et_final_dict = {
+    "k": None,
+    "columns": forest_importances.index.tolist(),
+    "importances": forest_importances.values.tolist(),
+}
+
+with open(fs_final_path + "permutation_importance.json", "w") as fp:
+    json.dump(et_final_dict, fp) 
+```
+
+```{python}
+ forest_importances
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(12,6))
+forest_importances.plot.bar(yerr=result.importances_std, ax=ax)
+ax.set_title("Feature importances using permutation on full model")
+ax.set_ylabel("Mean accuracy decrease")
+fig.tight_layout()
+plt.show()
+```
+
+---
+# Analysis - Correlation matrix with heatmap
+
+```{python}
+#get correlations of each features in dataset and plot heatmap
+corrmat = pd.concat([X,y], axis = 1).corr()
+top_corr_features = corrmat.index
+plt.figure(figsize=(24,24))
+g=sns.heatmap(pd.concat([X,y], axis = 1)[top_corr_features].corr(),annot=True,cmap="RdYlGn")
+plt.tight_layout()
+```
+
+```{python}
+plt.figure(figsize=(24,10))
+g2=sns.heatmap(pd.DataFrame(pd.concat([X,y], axis = 1)[top_corr_features].corr().loc['rating']).T,annot=False,cmap="RdYlGn")
+```
+
+- This heatmap is to show which features are highly correlated with the output feature
+- positive - increase in one value increases the target value and viceversa
+- cummulative mean rating and and mean rating have high correlation with the rating. 
+- this is because these features are extracted from rating. 
+- movie id and release date don't have high correlation with the rating, but still those features are important. 
+
+
+# 3. Embedded methods
+
+```{python}
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Lasso, LogisticRegression
+from sklearn.feature_selection import SelectFromModel
+from sklearn.preprocessing import StandardScaler
+```
+
+```{python}
+scaler = StandardScaler()
+scaled = scaler.fit_transform(X)
+```
+
+```{python}
+for i in range(0 ,550, 50):
+    
+    sel_ = SelectFromModel(LogisticRegression(C=1, penalty='l2'), max_features = i)
+    sel_.fit(scaled, y)
+    
+    selected_feat = X.columns[(sel_.get_support())]
+    print('total no of features: {}'.format((X.shape[1])))
+    print('No of selected features: {}'.format(len(selected_feat)))
+    print('features with coefficients shrank to zero: {}'.format(
+    np.sum(sel_.estimator_.coef_ == 0)))
+    
+    # save the info
+    et_final_dict = {
+        "k": None,
+        "columns": selected_feat.tolist(),
+        "importances": None,
+    }
+
+    with open(fs_final_path + "/sfm/" + "select_from_model_" + str(i) + ".json", "w") as fp:
+        json.dump(et_final_dict, fp) 
+```
+
+```{python}
+
+```
+
+```{python}
+sel_.get_support()
+```
+
+```{python}
+selected_feat = X.columns[(sel_.get_support())]
+print('total no of features: {}'.format((X.shape[1])))
+print('No of selected features: {}'.format(len(selected_feat)))
+print('features with coefficients shrank to zero: {}'.format(
+      np.sum(sel_.estimator_.coef_ == 0)))
+```
+
+```{python}
+# save the info
+et_final_dict = {
+    "k": None,
+    "columns": selected_feat.tolist(),
+    "importances": None,
+}
+
+with open(fs_final_path + "select_from_model_500.json", "w") as fp:
+    json.dump(et_final_dict, fp) 
+```
+
+# Van Methods
+
+```{python}
+
+```
+
+---
+
+
+# Fadi Methods
+
+```{python}
+
+```
+
+---
+
+```{python}
+
+```

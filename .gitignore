@@ -10,4 +10,3 @@ etc/
 dataset/fm/
 dataset/rf/
 models/
-*.ipynb

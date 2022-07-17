@@ -10,3 +10,5 @@ etc/
 dataset/fm/
 dataset/rf/
 models/
+bin2/
+.*jupyter_notebook_config.py

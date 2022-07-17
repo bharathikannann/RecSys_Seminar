@@ -13,3 +13,4 @@ models/
 bin2/
 .*jupyter_notebook_config.py
 feature_selection/
+bin3/

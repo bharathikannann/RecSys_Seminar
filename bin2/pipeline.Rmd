@@ -51,7 +51,12 @@ fs_path = fs_info['fs_rf_path']
 fs_final_path = fs_info['fs_final_path']
 ```
 
-### FM Training and Testing
+```{python}
+path = dataset_info['ori_path']
+genre_cols = pd.read_csv(path + 'ml-100k/u.genre', sep='|', header=None)[0].to_numpy().tolist()
+```
+
+### FM Training and Testing data
 
 ```{python}
 train = pickle.load(open(fm_data_path_new + train_set_filename, 'rb'))
@@ -90,7 +95,7 @@ available_methods_rf = []
 for subdir, dirs, files in os.walk(fs_final_path):
     if len(dirs) == 1:
         for file in files:
-            available_methods_rf.append(file[:-5])
+            available_methods_rf.append(file[:])
 pd.DataFrame(available_methods_rf)
 ```
 
@@ -111,11 +116,6 @@ for i in range(len(available_methods_rf)):
 ```
 
 ```{python}
-path = dataset_info['ori_path']
-genre_cols = pd.read_csv(path + 'ml-100k/u.genre', sep='|', header=None)[0].to_numpy().tolist()
-```
-
-```{python}
 # # choose the method
 # choose_method = 4
 # sel_from_model_col_rf = selected_col_dict_rf[available_methods_rf[choose_method]]["columns"].copy()
@@ -124,8 +124,7 @@ genre_cols = pd.read_csv(path + 'ml-100k/u.genre', sep='|', header=None)[0].to_n
 
 # Training MyFM model
 
-
-## Select from model
+There are two ways for the myFM model. Few methods directly gives the number of features we want. So each time a separete list is create and those are imported here for training the myFM
 
 ```{python}
 path = 'feature_selection/final/f-classif/'
@@ -227,6 +226,8 @@ for i in range(10,11):
 
 ## Tree based methods
 
+Tree based methods have only one feature importance column. The columns re sorted based on the importance. Everytime top N features are seklected and given to the myFM model
+
 ```{python}
 # choose the method
 choose_method = 0
@@ -276,17 +277,6 @@ rmse_results.insert(0,0)
 ```
 
 ```{python}
-# df = pd.read_csv("feature_selection/final_results/extra_tree_classifier_improved.csv", header = None, names=['extra_tree_classifier'])
-# df['permutation_importance'] = pd.read_csv("feature_selection/final_results/permutation_importance_improved.csv", header = None)
-# df["random_forest"] = pd.read_csv("feature_selection/final_results/random_forest_improved.csv", header = None)
-# df["select_from_model"] = pd.read_csv("feature_selection/final_results/select_from_model_improved.csv", header = None)
-# df["classif"] = pd.read_csv("feature_selection/final_results/f-classif.csv", header = None)
-# df["chi2"] = pd.read_csv("feature_selection/final_results/chi2.csv", header = None)
-# df["mutual_importance_regression"] = pd.read_csv("feature_selection/final_results/mutual_importance_regression.csv", header = None)
-# df["recursive_feature_elimination"] = pd.read_csv("feature_selection/final_results/recursive_feature_elimination.csv", header = None)
-```
-
-```{python}
 colors = ['olive','b','c','m','y','brown','r','g']
 plt.figure(figsize=(12,6))
 plt.ylim(0.85,0.93)
@@ -304,18 +294,4 @@ np.savetxt("feature_selection/final_results/f-classif.csv",
            rmse_results,
            delimiter =", ", 
            fmt ='% s')
-```
-
-# Baseline
-
-```{python}
-fm = MyFMRegressor(rank=10)
-fm.fit(X_train, y_train, n_iter=200, group_shapes=group_shapes, n_kept_samples=200)
-```
-
-```{python}
-prediction = fm.predict(X_test)
-rmse = ((y_test - prediction) ** 2).mean() ** .5
-mae = np.abs(y_test - prediction).mean()
-print(f'rmse={rmse}, mae={mae}')
 ```

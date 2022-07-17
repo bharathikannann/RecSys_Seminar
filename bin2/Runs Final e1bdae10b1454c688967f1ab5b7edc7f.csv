@@ -1,0 +1,8 @@
+﻿Name,Tags,RMSE
+Base Model with only movieid and userid,,0.8991315281274384
+base model with all columns,,0.913485442355879
+Random Forest,,0.9175113705508351
+Select from model,,0.9223263311286289
+Extra Tree Classifier,,0.9189343391184016
+Permutation Importance,,0.9085616445214975
+Random Selection (Without feature Engineering),,0.8879488435976195

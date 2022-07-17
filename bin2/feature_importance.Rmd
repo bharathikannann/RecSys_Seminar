@@ -400,14 +400,6 @@ for i in range(0 ,550, 50):
 ```
 
 ```{python}
-
-```
-
-```{python}
-sel_.get_support()
-```
-
-```{python}
 selected_feat = X.columns[(sel_.get_support())]
 print('total no of features: {}'.format((X.shape[1])))
 print('No of selected features: {}'.format(len(selected_feat)))
@@ -425,25 +417,4 @@ et_final_dict = {
 
 with open(fs_final_path + "select_from_model_500.json", "w") as fp:
     json.dump(et_final_dict, fp) 
-```
-
-# Van Methods
-
-```{python}
-
-```
-
----
-
-
-# Fadi Methods
-
-```{python}
-
-```
-
----
-
-```{python}
-
 ```
